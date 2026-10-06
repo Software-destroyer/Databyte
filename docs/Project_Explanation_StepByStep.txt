@@ -1,0 +1,834 @@
+================================================================================
+     CROSS-DATASET INTRUSION DETECTION — COMPLETE PROJECT EXPLANATION
+     How the Project Works & How We Will Build It (Step by Step)
+================================================================================
+
+
+================================================================================
+PART 1: WHAT IS THIS PROJECT ABOUT? (THE BIG PICTURE)
+================================================================================
+
+Imagine you build a security camera system that can detect intruders. You
+train it by showing it videos of intruders breaking into Building A. It
+learns perfectly — 99% accuracy detecting intruders in Building A.
+
+Now you install that same camera system in Building B — a completely different
+building with different lighting, different layout, different doors. Suddenly
+it can barely detect 50% of the intruders.
+
+That's EXACTLY what happens with Machine Learning-based Network Intrusion
+Detection Systems (NIDS). Researchers train ML models on one benchmark
+dataset (like CICIDS2017) and they get 99% accuracy. But when they deploy
+the same model on a different network (represented by UNSW-NB15), accuracy
+collapses to 40-60%.
+
+OUR PROJECT does three things:
+  1. PROVES this collapse exists (with numbers and evidence)
+  2. EXPLAINS WHY it happens (using statistical analysis)
+  3. FIXES IT (using feature alignment and domain adaptation techniques)
+
+And we wrap everything in an interactive Streamlit web dashboard so anyone
+can see and interact with the results.
+
+
+================================================================================
+PART 2: THE TWO DATASETS WE USE
+================================================================================
+
+DATASET 1: CICIDS2017
+─────────────────────
+- Created by: Canadian Institute for Cybersecurity (University of New Brunswick)
+- What it is: 5 days of captured network traffic (both normal + attacks)
+- Features: 80+ features extracted using a tool called CICFlowMeter
+- Attack types: DoS, DDoS, Brute Force, Web Attacks, Infiltration, Botnet,
+  Port Scanning
+- Format: Multiple CSV files (one per day)
+- Download: https://www.unb.ca/cic/datasets/ids-2017.html
+
+DATASET 2: UNSW-NB15
+─────────────────────
+- Created by: Australian Centre for Cyber Security (UNSW Canberra)
+- What it is: Synthetic modern network traffic with realistic attacks
+- Features: 49 features extracted using Argus and Bro-Zeek tools
+- Attack types: Fuzzers, Analysis, Backdoors, DoS, Exploits, Generic,
+  Reconnaissance, Shellcode, Worms
+- Format: CSV files
+- Download: https://research.unsw.edu.au/projects/unsw-nb15-dataset
+
+WHY THESE TWO?
+  - They are the two most widely used IDS benchmark datasets globally
+  - They were created using DIFFERENT tools, in DIFFERENT networks,
+    at DIFFERENT times — making them ideal for testing generalization
+  - Their feature spaces are DIFFERENT (different names, different counts,
+    different scales) — which is the core challenge
+
+
+================================================================================
+PART 3: HOW THE PROJECT WORKS — STEP BY STEP
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 1: DATASET ACQUISITION & PREPROCESSING
+────────────────────────────────────────────────────────────────────────────────
+
+WHAT WE DO:
+  Download both datasets (CSV files) and clean them up.
+
+HOW TO BUILD IT:
+
+  1.1  Download the CICIDS2017 CSV files (there are 8 files, one per day
+       of capture). Combine them into one DataFrame.
+
+  1.2  Download the UNSW-NB15 CSV files (UNSW-NB15_1.csv through
+       UNSW-NB15_4.csv). Combine them into one DataFrame.
+
+  1.3  Data Cleaning (apply to both datasets):
+       - Remove rows with NaN/null values (or impute with median)
+       - Replace infinite values (Inf, -Inf) with the 99.9th percentile
+         value of that column (these appear in flow rate calculations
+         like "Flow Bytes/s" when duration is zero)
+       - Drop constant/zero-variance columns (features that have the
+         same value for every row — they provide no information)
+       - Remove duplicate rows
+
+  1.4  Label Encoding:
+       - For CICIDS2017: The "Label" column has values like "BENIGN",
+         "DoS Hulk", "DDoS", etc. Create a binary label:
+           * "BENIGN" → 0
+           * Everything else → 1 (Attack)
+       - For UNSW-NB15: The "label" column already has 0 (normal) and
+         1 (attack). The "attack_cat" column has the attack category.
+
+  1.5  Stratified Subsampling (if needed for memory):
+       - If the full datasets are too large for your RAM, take a
+         stratified random sample of 200,000-500,000 rows per dataset,
+         preserving the original class distribution (ratio of benign
+         to attack traffic).
+
+  PYTHON LIBRARIES: pandas, numpy
+  ESTIMATED TIME: 1-2 days
+
+  SAMPLE CODE STRUCTURE:
+  ┌─────────────────────────────────────────────────────────┐
+  │  import pandas as pd                                    │
+  │  import numpy as np                                     │
+  │                                                         │
+  │  # Load CICIDS2017                                      │
+  │  cic_files = glob.glob("CICIDS2017/*.csv")              │
+  │  cic_df = pd.concat([pd.read_csv(f) for f in cic_files])│
+  │                                                         │
+  │  # Clean: replace inf, drop NaN, drop constant cols     │
+  │  cic_df.replace([np.inf, -np.inf], np.nan, inplace=True)│
+  │  cic_df.dropna(inplace=True)                            │
+  │  cic_df = cic_df.loc[:, cic_df.nunique() > 1]           │
+  │                                                         │
+  │  # Binary label                                         │
+  │  cic_df['binary_label'] = (cic_df['Label']!='BENIGN')   │
+  │                           .astype(int)                   │
+  └─────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 2: SEMANTIC FEATURE MAPPING & ONTOLOGY RECONCILIATION
+────────────────────────────────────────────────────────────────────────────────
+
+WHAT WE DO:
+  Create a mapping between features in CICIDS2017 and UNSW-NB15 that
+  measure the same thing but have different names.
+
+WHY THIS IS NEEDED:
+  CICIDS2017 calls forward packet count "Total Fwd Packets"
+  UNSW-NB15 calls the same thing "spkts"
+  They mean the same thing! But the columns have different names.
+
+HOW TO BUILD IT:
+
+  2.1  Study the documentation of both datasets to understand what each
+       feature represents.
+
+  2.2  Create a manual mapping dictionary. Here are the key mappings:
+
+       CICIDS2017 Feature          →  UNSW-NB15 Feature
+       ─────────────────────────────────────────────────────
+       Flow Duration               →  dur
+       Total Fwd Packets           →  Spkts
+       Total Backward Packets      →  Dpkts
+       Total Length of Fwd Packets  →  Sbytes
+       Total Length of Bwd Packets  →  Dbytes
+       Flow Packets/s              →  Rate
+       Fwd Packet Length Mean      →  Smean
+       Bwd Packet Length Mean      →  Dmean
+       Flow IAT Mean               →  Sintpkt / Dintpkt
+       Protocol                    →  proto
+       Fwd PSH Flags               →  ct_flw_http_mthd (partial)
+       SYN Flag Count              →  is_sm_ips_ports (partial)
+
+  2.3  Rename columns in both datasets to use a COMMON naming scheme:
+       For example:
+         "Flow Duration" (CICIDS) → "flow_duration"
+         "dur" (UNSW)             → "flow_duration"
+
+  2.4  Select ONLY the columns that exist in both datasets (the shared
+       feature space). Drop all dataset-specific features.
+
+  2.5  Verify the mapping by checking that the distributions of mapped
+       features are conceptually similar (e.g., both "flow_duration"
+       columns should represent time in similar units).
+
+  ESTIMATED TIME: 2-3 days (mostly manual research + verification)
+
+  SAMPLE CODE STRUCTURE:
+  ┌─────────────────────────────────────────────────────────┐
+  │  # Feature mapping dictionary                          │
+  │  feature_map_cic = {                                   │
+  │      'Flow Duration': 'flow_duration',                 │
+  │      'Total Fwd Packets': 'fwd_packets',               │
+  │      'Total Backward Packets': 'bwd_packets',          │
+  │      'Total Length of Fwd Packets': 'fwd_bytes',        │
+  │      'Total Length of Bwd Packets': 'bwd_bytes',        │
+  │      'Flow Packets/s': 'flow_rate',                    │
+  │      'Fwd Packet Length Mean': 'fwd_pkt_mean',          │
+  │      'Bwd Packet Length Mean': 'bwd_pkt_mean',          │
+  │  }                                                     │
+  │  feature_map_unsw = {                                  │
+  │      'dur': 'flow_duration',                           │
+  │      'Spkts': 'fwd_packets',                           │
+  │      'Dpkts': 'bwd_packets',                           │
+  │      'Sbytes': 'fwd_bytes',                            │
+  │      'Dbytes': 'bwd_bytes',                            │
+  │      'Rate': 'flow_rate',                              │
+  │      'Smean': 'fwd_pkt_mean',                          │
+  │      'Dmean': 'bwd_pkt_mean',                          │
+  │  }                                                     │
+  │                                                         │
+  │  cic_aligned = cic_df.rename(columns=feature_map_cic)   │
+  │  unsw_aligned = unsw_df.rename(columns=feature_map_unsw)│
+  │                                                         │
+  │  # Keep only shared features                            │
+  │  shared = list(set(feature_map_cic.values()) &          │
+  │                set(feature_map_unsw.values()))           │
+  │  cic_aligned = cic_aligned[shared + ['binary_label']]   │
+  │  unsw_aligned = unsw_aligned[shared + ['binary_label']]  │
+  └─────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 3: SAME-DATASET BASELINE MODELING
+────────────────────────────────────────────────────────────────────────────────
+
+WHAT WE DO:
+  Train and test each of the 5 ML models WITHIN each dataset to establish
+  the "best case" performance upper bound.
+
+HOW TO BUILD IT:
+
+  3.1  For CICIDS2017:
+       - Split into 80% train / 20% test (stratified by label)
+       - Scale features using StandardScaler (fit on train, transform both)
+       - Train each of the 5 models:
+           a) Decision Tree (criterion='gini')
+           b) Random Forest (n_estimators=100)
+           c) Logistic Regression (penalty='l2', max_iter=1000)
+           d) SVM (kernel='linear' and kernel='rbf')
+           e) XGBoost (max_depth=6, learning_rate=0.1, n_estimators=100)
+       - Predict on test set
+       - Record metrics: Accuracy, Precision, Recall, F1 (macro),
+         MCC (Matthews Correlation Coefficient), ROC-AUC, FAR
+
+  3.2  Repeat the exact same process for UNSW-NB15.
+
+  3.3  Store all results in a structured DataFrame or dictionary for
+       later comparison.
+
+  EXPECTED RESULTS: All models should achieve 95-99% accuracy on their
+  own dataset. This is the "illusion" — performance looks perfect.
+
+  PYTHON LIBRARIES: scikit-learn, xgboost
+  ESTIMATED TIME: 2-3 days
+
+  SAMPLE CODE STRUCTURE:
+  ┌─────────────────────────────────────────────────────────┐
+  │  from sklearn.model_selection import train_test_split    │
+  │  from sklearn.preprocessing import StandardScaler        │
+  │  from sklearn.tree import DecisionTreeClassifier          │
+  │  from sklearn.ensemble import RandomForestClassifier      │
+  │  from sklearn.linear_model import LogisticRegression      │
+  │  from sklearn.svm import SVC                              │
+  │  from xgboost import XGBClassifier                        │
+  │  from sklearn.metrics import (accuracy_score, f1_score,   │
+  │      matthews_corrcoef, roc_auc_score, confusion_matrix)  │
+  │                                                           │
+  │  models = {                                               │
+  │    'DT': DecisionTreeClassifier(),                        │
+  │    'RF': RandomForestClassifier(n_estimators=100),         │
+  │    'LR': LogisticRegression(max_iter=1000),                │
+  │    'SVM': SVC(kernel='rbf', probability=True),             │
+  │    'XGB': XGBClassifier(max_depth=6, learning_rate=0.1),   │
+  │  }                                                        │
+  │                                                           │
+  │  X = cic_aligned[shared_features]                         │
+  │  y = cic_aligned['binary_label']                          │
+  │  X_train, X_test, y_train, y_test = train_test_split(    │
+  │      X, y, test_size=0.2, stratify=y, random_state=42)    │
+  │                                                           │
+  │  scaler = StandardScaler()                                │
+  │  X_train_s = scaler.fit_transform(X_train)                │
+  │  X_test_s = scaler.transform(X_test)                      │
+  │                                                           │
+  │  for name, model in models.items():                       │
+  │      model.fit(X_train_s, y_train)                        │
+  │      y_pred = model.predict(X_test_s)                     │
+  │      print(f"{name}: Acc={accuracy_score(y_test, y_pred)}")│
+  └─────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 4: BIDIRECTIONAL CROSS-DATASET TRANSFER
+────────────────────────────────────────────────────────────────────────────────
+
+WHAT WE DO:
+  Train on one dataset and test on the OTHER — in both directions.
+  This is the core experiment that exposes the generalization gap.
+
+HOW TO BUILD IT:
+
+  4.1  DIRECTION 1: CICIDS → UNSW
+       - Use the models already trained on CICIDS2017 (from Step 3)
+       - Use the scaler fitted on CICIDS2017 training data
+       - Transform the ENTIRE UNSW-NB15 aligned dataset using that scaler
+       - Predict on UNSW-NB15 using each trained model
+       - Record all metrics
+
+  4.2  DIRECTION 2: UNSW → CICIDS
+       - Use the models trained on UNSW-NB15 (from Step 3)
+       - Use the scaler fitted on UNSW-NB15 training data
+       - Transform the ENTIRE CICIDS2017 aligned dataset using that scaler
+       - Predict on CICIDS2017 using each trained model
+       - Record all metrics
+
+  4.3  Calculate the "Generalization Gap" for each model:
+       Gap = Same-Dataset Score − Cross-Dataset Score
+
+  EXPECTED RESULTS: Accuracy will drop from ~98% to ~40-65%. Some models
+  will drop more than others. This is the evidence of the problem.
+
+  ESTIMATED TIME: 1-2 days
+
+  SAMPLE CODE STRUCTURE:
+  ┌─────────────────────────────────────────────────────────┐
+  │  # Direction 1: Model trained on CIC, tested on UNSW    │
+  │  X_unsw = unsw_aligned[shared_features]                 │
+  │  y_unsw = unsw_aligned['binary_label']                  │
+  │  X_unsw_scaled = cic_scaler.transform(X_unsw)           │
+  │                                                          │
+  │  for name, model in cic_models.items():                  │
+  │      y_pred = model.predict(X_unsw_scaled)               │
+  │      acc = accuracy_score(y_unsw, y_pred)                │
+  │      f1 = f1_score(y_unsw, y_pred, average='macro')      │
+  │      mcc = matthews_corrcoef(y_unsw, y_pred)              │
+  │      print(f"CIC→UNSW {name}: Acc={acc:.3f} F1={f1:.3f}")│
+  └─────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 5: STATISTICAL DOMAIN DIVERGENCE ANALYSIS
+────────────────────────────────────────────────────────────────────────────────
+
+WHAT WE DO:
+  Mathematically measure HOW DIFFERENT the two datasets are, feature by
+  feature. This explains WHY the cross-dataset transfer fails.
+
+HOW TO BUILD IT:
+
+  5.1  For each shared feature, compute:
+
+       a) KL Divergence: Measures how one probability distribution
+          differs from another. First, create histograms (discretize
+          the feature into bins), then compute:
+            D_KL(P || Q) = Σ P(x) * log(P(x) / Q(x))
+          Higher values = more different distributions.
+
+       b) Wasserstein Distance (Earth Mover's Distance): The minimum
+          amount of "work" needed to transform one distribution into
+          another. Use scipy.stats.wasserstein_distance().
+          Higher values = more different distributions.
+
+       c) Maximum Mean Discrepancy (MMD): A kernel-based distance
+          metric that measures the difference between the means of
+          two distributions in a reproducing kernel Hilbert space.
+          Requires implementing a custom function with RBF kernel.
+
+  5.2  Rank features by divergence: Identify the top-10 features with
+       the highest divergence — these are the features causing the most
+       cross-dataset confusion.
+
+  5.3  Visualize: Plot distribution overlays for the top divergent
+       features (CICIDS distribution in blue vs UNSW distribution in
+       green on the same histogram).
+
+  PYTHON LIBRARIES: scipy.stats, numpy, matplotlib
+  ESTIMATED TIME: 2-3 days
+
+  SAMPLE CODE STRUCTURE:
+  ┌─────────────────────────────────────────────────────────┐
+  │  from scipy.stats import entropy, wasserstein_distance   │
+  │  from scipy.spatial.distance import cdist                │
+  │                                                          │
+  │  divergence_results = {}                                 │
+  │  for feat in shared_features:                            │
+  │      cic_vals = cic_aligned[feat].values                 │
+  │      unsw_vals = unsw_aligned[feat].values               │
+  │                                                          │
+  │      # Wasserstein Distance                              │
+  │      wd = wasserstein_distance(cic_vals, unsw_vals)      │
+  │                                                          │
+  │      # KL Divergence (need to discretize first)          │
+  │      bins = np.linspace(min(cic_vals.min(),              │
+  │          unsw_vals.min()), max(cic_vals.max(),            │
+  │          unsw_vals.max()), 100)                           │
+  │      p = np.histogram(cic_vals, bins=bins, density=True) │
+  │      q = np.histogram(unsw_vals, bins=bins, density=True)│
+  │      kl = entropy(p[0] + 1e-10, q[0] + 1e-10)           │
+  │                                                          │
+  │      divergence_results[feat] = {'WD': wd, 'KL': kl}    │
+  └─────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 6: FEATURE SELECTION & DOMAIN-INVARIANT TRANSFORMATION
+────────────────────────────────────────────────────────────────────────────────
+
+WHAT WE DO:
+  Apply three techniques to reduce the domain gap between datasets.
+
+HOW TO BUILD IT:
+
+  6.1  TECHNIQUE A: Mutual Information Feature Selection
+       - Compute the Mutual Information between each feature and the
+         binary label (for both datasets separately)
+       - Keep only features that have HIGH MI in BOTH datasets
+       - These are features that are predictive of attacks regardless
+         of which dataset they come from
+       - Use sklearn.feature_selection.mutual_info_classif()
+
+  6.2  TECHNIQUE B: Recursive Feature Elimination (RFE)
+       - Train a Random Forest on the combined (both datasets) data
+       - Use RFE to recursively remove the least important features
+       - The surviving features are the most generalizable ones
+       - Use sklearn.feature_selection.RFE()
+
+  6.3  TECHNIQUE C: Domain-Invariant Normalization
+       - Instead of StandardScaler (which is dataset-specific), apply:
+
+         a) Quantile Transformer: Transforms each feature to follow
+            a uniform or normal distribution. This eliminates
+            differences caused by different network speeds.
+            Use sklearn.preprocessing.QuantileTransformer()
+
+         b) Robust Z-Score: Uses median and IQR instead of mean and
+            std, making it resistant to outliers.
+            Use sklearn.preprocessing.RobustScaler()
+
+  6.4  TECHNIQUE D: CORAL (Correlation Alignment)
+       - This is the most sophisticated technique
+       - Compute the covariance matrix of the source dataset (C_s)
+       - Compute the covariance matrix of the target dataset (C_t)
+       - Transform the source features so their covariance matches
+         the target:
+           X_aligned = X_source * C_s^(-1/2) * C_t^(1/2)
+       - This aligns the second-order statistics without needing
+         any labels from the target
+
+  PYTHON LIBRARIES: scikit-learn, numpy, scipy
+  ESTIMATED TIME: 3-4 days
+
+  SAMPLE CODE FOR CORAL:
+  ┌─────────────────────────────────────────────────────────┐
+  │  import numpy as np                                      │
+  │  from scipy.linalg import fractional_matrix_power        │
+  │                                                          │
+  │  def coral_transform(X_source, X_target):                │
+  │      """Align source to target covariance."""             │
+  │      # Covariance matrices                               │
+  │      C_s = np.cov(X_source, rowvar=False) + np.eye(      │
+  │          X_source.shape[1]) * 1e-6                        │
+  │      C_t = np.cov(X_target, rowvar=False) + np.eye(      │
+  │          X_target.shape[1]) * 1e-6                        │
+  │                                                          │
+  │      # Whitening source                                  │
+  │      C_s_inv_half = fractional_matrix_power(C_s, -0.5)   │
+  │      # Re-coloring to target                             │
+  │      C_t_half = fractional_matrix_power(C_t, 0.5)        │
+  │                                                          │
+  │      # Transform                                         │
+  │      X_aligned = X_source @ C_s_inv_half @ C_t_half      │
+  │      return X_aligned                                    │
+  │                                                          │
+  │  X_cic_aligned = coral_transform(X_cic_scaled,           │
+  │                                  X_unsw_scaled)           │
+  └─────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 7: RETRAIN, EVALUATE & ABLATION STUDY
+────────────────────────────────────────────────────────────────────────────────
+
+WHAT WE DO:
+  Retrain models on the ALIGNED feature spaces and measure improvement.
+
+HOW TO BUILD IT:
+
+  7.1  Retrain all 5 models using the transformed/aligned features from
+       Step 6 (with CORAL, with MI selection, with RFE, etc.)
+
+  7.2  Re-run cross-dataset transfer (Step 4) but on aligned data:
+       - Train on CORAL-aligned CICIDS → Test on UNSW
+       - Train on CORAL-aligned UNSW → Test on CICIDS
+
+  7.3  Calculate the Generalization Recovery Ratio (GRR):
+
+       GRR = (Score_aligned - Score_raw_cross) / (Score_same - Score_raw_cross)
+
+       Where:
+         Score_same      = Same-dataset accuracy (from Step 3, e.g., 98%)
+         Score_raw_cross = Raw cross-dataset accuracy (from Step 4, e.g., 50%)
+         Score_aligned   = Aligned cross-dataset accuracy (from Step 7, e.g., 75%)
+
+       Example: GRR = (75 - 50) / (98 - 50) = 25/48 = 0.52 = 52% recovery
+
+  7.4  Ablation Study: Test each mitigation technique individually:
+       - MI only
+       - RFE only
+       - CORAL only
+       - Quantile Transform only
+       - MI + CORAL
+       - RFE + CORAL
+       - All combined
+       This tells us which technique contributes the most improvement.
+
+  7.5  Rank models by cross-dataset robustness:
+       - Which model drops the least from same-dataset to cross-dataset?
+       - Which model benefits the most from alignment?
+
+  ESTIMATED TIME: 3-4 days
+
+
+────────────────────────────────────────────────────────────────────────────────
+STEP 8: STREAMLIT DASHBOARD
+────────────────────────────────────────────────────────────────────────────────
+
+WHAT WE DO:
+  Build an interactive web application that visualizes all results.
+
+HOW TO BUILD IT:
+
+  8.1  Install Streamlit: pip install streamlit plotly
+
+  8.2  Create the main app file (app.py) with these pages/sections:
+
+       a) SIDEBAR CONTROLS:
+          - Dropdown: Select Source Dataset (CICIDS2017 / UNSW-NB15)
+          - Dropdown: Select Target Dataset
+          - Dropdown: Select Model (DT / RF / LR / SVM / XGB)
+          - Dropdown: Select Alignment (None / MI / RFE / CORAL / All)
+          - Button: "Run Evaluation"
+
+       b) CONFUSION MATRIX PANEL:
+          - Display interactive confusion matrix (heatmap) using Plotly
+          - Show True Positives, False Positives, True Negatives,
+            False Negatives with color coding
+          - Update dynamically based on sidebar selections
+
+       c) ROC / PR CURVE PANEL:
+          - Plot ROC curve (True Positive Rate vs False Positive Rate)
+          - Plot Precision-Recall curve
+          - Overlay curves for "before alignment" vs "after alignment"
+          - Show AUC values in legend
+
+       d) FEATURE DISTRIBUTION PANEL:
+          - Select a feature from dropdown
+          - Show overlapping histograms:
+            * CICIDS distribution (blue)
+            * UNSW distribution (green)
+            * After CORAL alignment (purple)
+          - Helps visualize how alignment reduces distribution mismatch
+
+       e) METRICS COMPARISON TABLE:
+          - Table showing all metrics (Acc, F1, MCC, FAR) for:
+            * Same-dataset baseline
+            * Raw cross-dataset transfer
+            * Aligned cross-dataset transfer
+          - For all 5 models side by side
+          - Highlight improvements in green, degradations in red
+
+       f) GRR BAR CHART:
+          - Bar chart comparing Generalization Recovery Ratio across
+            all 5 models and all mitigation strategies
+
+       g) AUTOMATED REPORT:
+          - "Generate Report" button that creates a summary PDF/HTML
+          - Includes all charts, metrics, and key findings
+
+  8.3  Run with: streamlit run app.py
+
+  PYTHON LIBRARIES: streamlit, plotly, matplotlib, pandas
+  ESTIMATED TIME: 4-5 days
+
+  SAMPLE CODE STRUCTURE:
+  ┌─────────────────────────────────────────────────────────┐
+  │  import streamlit as st                                  │
+  │  import plotly.express as px                              │
+  │  import plotly.figure_factory as ff                       │
+  │  import pandas as pd                                     │
+  │  import pickle                                           │
+  │                                                          │
+  │  st.set_page_config(page_title="Cross-Dataset IDS",      │
+  │                     layout="wide")                        │
+  │  st.title("Cross-Dataset Intrusion Detection Dashboard") │
+  │                                                          │
+  │  # Sidebar                                               │
+  │  source = st.sidebar.selectbox("Source Dataset",          │
+  │      ["CICIDS2017", "UNSW-NB15"])                        │
+  │  target = st.sidebar.selectbox("Target Dataset",          │
+  │      ["UNSW-NB15", "CICIDS2017"])                        │
+  │  model = st.sidebar.selectbox("Model",                    │
+  │      ["Decision Tree", "Random Forest", "LR", "SVM",     │
+  │       "XGBoost"])                                         │
+  │  alignment = st.sidebar.selectbox("Alignment",            │
+  │      ["None", "MI", "RFE", "CORAL", "All Combined"])      │
+  │                                                          │
+  │  # Load pre-computed results                              │
+  │  results = pickle.load(open("results.pkl", "rb"))         │
+  │                                                          │
+  │  # Display metrics                                       │
+  │  col1, col2, col3 = st.columns(3)                        │
+  │  col1.metric("Accuracy", f"{results['acc']:.2%}")         │
+  │  col2.metric("F1 Score", f"{results['f1']:.2%}")          │
+  │  col3.metric("MCC", f"{results['mcc']:.3f}")              │
+  │                                                          │
+  │  # Confusion Matrix                                      │
+  │  fig = px.imshow(results['cm'], text_auto=True,           │
+  │      labels=dict(x="Predicted", y="Actual"))              │
+  │  st.plotly_chart(fig)                                     │
+  └─────────────────────────────────────────────────────────┘
+
+
+================================================================================
+PART 4: PROJECT FILE STRUCTURE
+================================================================================
+
+  cross-dataset-ids/
+  │
+  ├── data/
+  │   ├── raw/
+  │   │   ├── cicids2017/           # Raw CSV files
+  │   │   └── unsw_nb15/            # Raw CSV files
+  │   ├── processed/
+  │   │   ├── cic_cleaned.csv       # Cleaned CICIDS2017
+  │   │   ├── unsw_cleaned.csv      # Cleaned UNSW-NB15
+  │   │   ├── cic_aligned.csv       # Feature-aligned CICIDS
+  │   │   └── unsw_aligned.csv      # Feature-aligned UNSW
+  │   └── feature_mapping.json      # Semantic feature map
+  │
+  ├── src/
+  │   ├── preprocessing.py          # Step 1: Data cleaning
+  │   ├── feature_alignment.py      # Step 2: Semantic mapping
+  │   ├── baseline_models.py        # Step 3: Same-dataset training
+  │   ├── cross_dataset.py          # Step 4: Cross-dataset transfer
+  │   ├── divergence_analysis.py    # Step 5: KL, Wasserstein, MMD
+  │   ├── domain_alignment.py       # Step 6: CORAL, MI, RFE
+  │   ├── evaluation.py             # Step 7: Retrain & GRR
+  │   └── utils.py                  # Shared utility functions
+  │
+  ├── models/
+  │   ├── cic_baseline/             # Saved models trained on CICIDS
+  │   ├── unsw_baseline/            # Saved models trained on UNSW
+  │   └── aligned/                  # Models trained on aligned data
+  │
+  ├── results/
+  │   ├── baseline_metrics.csv      # Same-dataset results
+  │   ├── cross_dataset_metrics.csv # Cross-dataset results
+  │   ├── aligned_metrics.csv       # After-alignment results
+  │   ├── divergence_scores.csv     # Feature divergence scores
+  │   └── ablation_results.csv      # Ablation study results
+  │
+  ├── dashboard/
+  │   ├── app.py                    # Main Streamlit app
+  │   ├── pages/
+  │   │   ├── confusion_matrix.py
+  │   │   ├── roc_curves.py
+  │   │   ├── feature_shifts.py
+  │   │   └── report_generator.py
+  │   └── assets/                   # CSS, images
+  │
+  ├── notebooks/
+  │   ├── 01_data_exploration.ipynb
+  │   ├── 02_baseline_experiments.ipynb
+  │   ├── 03_cross_dataset_analysis.ipynb
+  │   └── 04_alignment_experiments.ipynb
+  │
+  ├── requirements.txt
+  ├── README.md
+  └── .gitignore
+
+
+================================================================================
+PART 5: COMPLETE REQUIREMENTS.TXT
+================================================================================
+
+  # Core
+  python>=3.10
+  numpy>=1.24
+  pandas>=2.0
+  scipy>=1.10
+
+  # Machine Learning
+  scikit-learn>=1.3
+  xgboost>=2.0
+
+  # Visualization
+  matplotlib>=3.7
+  seaborn>=0.12
+  plotly>=5.15
+
+  # Dashboard
+  streamlit>=1.28
+
+  # Data handling
+  dask>=2023.1        # For large dataset processing
+  openpyxl>=3.1       # For Excel export
+
+  # Utilities
+  joblib>=1.3         # Model serialization
+  tqdm>=4.65          # Progress bars
+
+
+================================================================================
+PART 6: EVALUATION METRICS EXPLAINED
+================================================================================
+
+  ACCURACY = (TP + TN) / (TP + TN + FP + FN)
+    → Overall percentage of correct predictions
+    → Can be misleading with imbalanced data
+
+  PRECISION = TP / (TP + FP)
+    → Of all predicted attacks, how many were actually attacks?
+    → High precision = few false alarms
+
+  RECALL = TP / (TP + FN)
+    → Of all actual attacks, how many did we catch?
+    → High recall = few missed attacks
+
+  F1 SCORE (Macro) = 2 * (Precision * Recall) / (Precision + Recall)
+    → Harmonic mean of precision and recall, averaged across classes
+    → Best single metric for imbalanced datasets
+
+  MCC (Matthews Correlation Coefficient) = 
+    (TP*TN - FP*FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
+    → Ranges from -1 to +1 (0 = random, +1 = perfect)
+    → Most informative single metric for binary classification
+
+  ROC-AUC = Area Under the ROC Curve
+    → Measures discriminative ability across all thresholds
+    → 0.5 = random, 1.0 = perfect
+
+  FAR (False Alarm Rate) = FP / (FP + TN)
+    → Percentage of normal traffic incorrectly flagged as attack
+    → Critical in production — high FAR = analyst fatigue
+
+  GRR (Generalization Recovery Ratio) =
+    (Score_aligned - Score_raw_cross) / (Score_same - Score_raw_cross)
+    → Measures how much of the cross-dataset gap is recovered
+    → 0% = no improvement, 100% = fully closed gap
+
+
+================================================================================
+PART 7: COMMON PITFALLS & HOW TO AVOID THEM
+================================================================================
+
+  1. DATA LEAKAGE: Never fit the scaler on test data. Always fit on
+     training data only, then transform test data.
+
+  2. CLASS IMBALANCE: CICIDS2017 has >80% benign traffic. Use
+     stratified sampling and consider SMOTE for training data.
+     Always use macro-averaged F1 and MCC, not just accuracy.
+
+  3. MEMORY OVERFLOW: Full CICIDS2017 is ~8GB in CSV. Use pandas
+     chunksize parameter or Dask for lazy loading. Subsample
+     strategically.
+
+  4. INFINITE VALUES: CICFlowMeter produces Inf values in flow rate
+     columns when flow duration is zero. Always replace these before
+     training.
+
+  5. FEATURE SCALE MISMATCH: UNSW's testbed is 10Gbps while CICIDS
+     is 1Gbps. This makes raw byte/packet counts very different.
+     Normalization (Quantile Transform) is essential.
+
+  6. OVERFITTING TO ALIGNMENT: Don't use target labels when doing
+     CORAL alignment — it must be unsupervised. Otherwise you're
+     cheating.
+
+  7. SVM TRAINING TIME: RBF-SVM on large datasets can take hours.
+     Start with LinearSVC for debugging, then switch to RBF for
+     final results. Consider subsampling for SVM.
+
+
+================================================================================
+PART 8: SUGGESTED WEEK-BY-WEEK BUILD PLAN
+================================================================================
+
+  WEEK 1-2:
+    □ Download both datasets
+    □ Read documentation for both datasets
+    □ Complete literature review
+    □ Set up Git repository
+    □ Create project folder structure
+    □ Write preprocessing.py (Step 1)
+
+  WEEK 2-3:
+    □ Complete data cleaning for both datasets
+    □ Create feature mapping dictionary (Step 2)
+    □ Write feature_alignment.py
+    □ Verify aligned datasets look correct
+
+  WEEK 3-4:
+    □ Implement all 5 classifiers (Step 3)
+    □ Train same-dataset baselines
+    □ Record baseline metrics
+    □ Save trained models with joblib
+
+  WEEK 4-5:
+    □ Implement cross-dataset transfer (Step 4)
+    □ Run both directions
+    □ Document the performance drop
+    □ Create comparison tables
+
+  WEEK 5-6:
+    □ Implement divergence metrics (Step 5)
+    □ Compute KL, Wasserstein, MMD for all features
+    □ Visualize top-divergent features
+    □ Begin CORAL implementation (Step 6)
+
+  WEEK 6-7:
+    □ Complete CORAL, MI, RFE implementations
+    □ Run aligned cross-dataset experiments (Step 7)
+    □ Compute GRR for all models
+    □ Run ablation study
+
+  WEEK 7-8:
+    □ Build Streamlit dashboard (Step 8)
+    □ Add confusion matrix, ROC, feature distribution pages
+    □ Test dashboard end-to-end
+
+  WEEK 8-9:
+    □ Final testing and debugging
+    □ Write project report
+    □ Prepare presentation
+    □ Code cleanup and documentation
+
+
+================================================================================
+                          END OF PROJECT EXPLANATION
+================================================================================

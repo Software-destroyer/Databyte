@@ -1,0 +1,235 @@
+================================================================================
+          TEAM SLIDE DIVISION & TRANSITION SCRIPT (12 SLIDES)
+                  BASED ON: final.pptx (4 TEAM MEMBERS)
+              PROJECT: CROSS-DATASET INTRUSION DETECTION
+               Minor Project Synopsis | B.Tech CSE | USTM
+================================================================================
+
+Total Slides: 12 Slides
+Team Members: 4 Members
+Allocation: Exactly 3 Slides Each (3.5 – 4 minutes speaking time per member)
+
+────────────────────────────────────────────────────────────────────────────────
+QUICK OVERVIEW TABLE
+────────────────────────────────────────────────────────────────────────────────
+Member & Roll No.            | Assigned Slides | Topic Focus
+─────────────────────────────┼─────────────────┼────────────────────────────────
+1. Pynskhemlang Marbaniang   | Slides 1, 2, 3  | Title, Background & Problem
+   (2023/BCSE/0005)          |                 | Statement (The Illusion)
+─────────────────────────────┼─────────────────┼────────────────────────────────
+2. Tehjib Almas Junaid       | Slides 4, 5, 6  | Scope of Study & Literature
+   (2023/BCSE/0032)          |                 | Review (Verkerken, Cantone, etc)
+─────────────────────────────┼─────────────────┼────────────────────────────────
+3. Bamelaai Marbaniang       | Slides 7, 8, 9  | 3 Research Gaps, Feasibility
+   (2023/BCSE/0045)          |                 | Study & 4 Formal Objectives
+─────────────────────────────┼─────────────────┼────────────────────────────────
+4. Md Sabique Huda           | Slides 10,11,12 | 7-Step Methodology, Expected
+   (2023/BCSE/0066)          |                 | Outcomes, References & Closing
+================================================================================
+
+
+================================================================================
+MEMBER 1: PYNSKHEMLANG MARBANIANG (Slides 1, 2, 3)
+Topic: Opening, Background & Problem Statement
+Time: ~3.5 Minutes
+================================================================================
+
+[SLIDE 1: Title Slide]
+"Good morning, respected Chairperson, honourable guide Mr. Abdul Kayum Ali sir,
+and esteemed faculty members.
+
+We are here to present our Minor Project Synopsis titled 'Cross-Dataset
+Intrusion Detection.'
+
+Our team members are Pynskhemlang Marbaniang, Tehjib Almas Junaid, Bamelaai
+Marbaniang, and Md Sabique Huda, from the Department of Computer Science &
+Engineering, USTM.
+
+Our project addresses a critical cybersecurity question: why machine learning
+models that achieve 99% accuracy in research fail when deployed in real networks."
+
+[SLIDE 2: 1. Introduction — i. Background of the Study]
+"Network Intrusion Detection Systems (NIDS) are the frontline defense inspecting
+network traffic in real time for exploits, protocol violations, and data exfiltration.
+
+Historically, signature-based systems like Snort, Suricata, and Zeek were used.
+While precise on known threats, they are fundamentally blind to novel zero-day attacks.
+
+To overcome this, cybersecurity shifted to Machine Learning and Deep Learning.
+Models like Decision Trees, Random Forests, SVM, and XGBoost learn statistical
+patterns from flow records, routinely reporting 98% to 99.5% accuracy on benchmarks
+like CICIDS2017 and UNSW-NB15."
+
+[SLIDE 3: ii. Problem Statement — The Same-Dataset Evaluation Illusion]
+"However, this near-perfect accuracy hides a major flaw: the 'Same-Dataset
+Evaluation Illusion.'
+
+In the laboratory, models are trained and tested on splits from the same dataset.
+They share the exact same network topology, background OS, and tooling — a closed world.
+The model memorizes simulator artifacts rather than real attack patterns.
+
+When deployed into a different network — the cross-dataset setting — the model faces
+covariate shift and concept drift.
+
+As shown on the slide, accuracy plummets from 99% down toward random guessing, and
+the Matthews Correlation Coefficient collapses toward zero.
+
+I now hand over to Tehjib Almas Junaid to discuss the scope and literature review."
+
+
+================================================================================
+MEMBER 2: TEHJIB ALMAS JUNAID (Slides 4, 5, 6)
+Topic: Importance, Scope of Study & Literature Review
+Time: ~3.5 Minutes
+================================================================================
+
+[HANDOVER ENTRY]:
+"Thank you, Pynskhemlang."
+
+[SLIDE 4: iii. Importance & iv. Scope of the Study]
+"Deployed intrusion detection systems that fail under real-world drift create false
+confidence while leaving networks exposed. Diagnosing and closing this gap is
+essential for trustworthy, deployable ML security.
+
+Our project scope is defined across four clear areas:
+1. Two Benchmark Datasets: CICIDS2017 with 80+ features, and UNSW-NB15 with 49 features.
+2. Five Classifier Families: Decision Tree, Random Forest, Logistic Regression, SVM,
+   and XGBoost.
+3. Bidirectional Transfer: Testing both CICIDS to UNSW, and UNSW to CICIDS.
+4. Active Mitigation Layer: Engineering feature selection, robust normalization, and
+   CORAL covariance alignment."
+
+[SLIDE 5: 2. Literature Review (Part 1)]
+"We critically reviewed five foundational papers in cross-dataset NIDS:
+
+First, Verkerken et al. (2022) in the Journal of Network and Systems Management
+evaluated bidirectional transfer between CICIDS2017 and UNSW-NB15. They proved
+that accuracy plummets by 28% to 42%, concluding that feature harmonization is mandatory.
+
+Second, Cantone et al. (2024) at IEEE CSR tested pairwise transfer across four
+CIC-family datasets, showing that cross-dataset MCC collapses from over 99.6% down to
+near-zero (~40% best case).
+
+Third, Ahmim et al. (2024) evaluated UNSW-NB15 and TON_IoT, finding that using a naive
+intersection of only 7 features caused accuracy to decline by up to 35%."
+
+[SLIDE 6: 2. Literature Review (Part 2)]
+"Continuing our literature synthesis:
+
+Fourth, Bertoli et al. (2022) trained DoS-detection models on CICIDS2017 and tested
+them on an independent physical testbed, documenting a 25.63% degradation because
+models rely on non-transferable background features.
+
+Fifth, Sarhan et al. (2021) explored standardized NetFlow feature extraction across
+four benchmarks, confirming that feature heterogeneity is the primary obstacle to
+transferability.
+
+I now invite Bamelaai Marbaniang to present the research gaps, feasibility, and objectives."
+
+
+================================================================================
+MEMBER 3: BAMELAAI MARBANIANG (Slides 7, 8, 9)
+Topic: 3 Research Gaps, Feasibility Study & Formal Objectives
+Time: ~3.5 Minutes
+================================================================================
+
+[HANDOVER ENTRY]:
+"Thank you, Tehjib."
+
+[SLIDE 7: 3. Research Gap — Three Pillars]
+"Synthesizing the reviewed literature reveals three critical research gaps:
+
+Pillar I: 'Diagnosis vs. Remediation.' Previous studies — including Verkerken et al.
+and Cantone et al. — observed the collapse and stopped. They treated it as an
+observational dead-end. Our project moves from observational diagnosis to active
+engineering remediation. We actively engineer solutions to bridge the gap!
+
+Pillar II: 'Semantic Feature Ontology Mismatch.' CICIDS uses CICFlowMeter (80+ features)
+while UNSW uses Argus/Zeek (49 features). No standardized semantic alignment exists
+between them.
+
+Pillar III: 'No Bidirectional Robustness Benchmark.' Most studies test only one
+direction and never systematically compare whether tree-based models or margin-based
+SVMs are more resilient to domain shift."
+
+[SLIDE 8: 4. Feasibility Study]
+"We conducted a four-dimension feasibility study:
+
+1. Technical: Datasets are publicly hosted with zero licensing restrictions.
+   Algorithms are supported by Scikit-Learn and XGBoost. Memory is constrained
+   under 6 GB RAM using stratified subsampling (200k–500k records).
+
+2. Economic: The entire software stack is open-source. Experiments run on our laptops
+   and free Google Colab GPUs. The total budget is ₹0.00.
+
+3. Operational: Divided into 4 modular engineering packages mapped directly to our
+   4 team members, coordinated via GitHub.
+
+4. Schedule & Risk: Planned across an 8–10 week timeline. Class imbalance is handled
+   via stratified sampling and SMOTE-NC; feature scales via Robust and Quantile scaling."
+
+[SLIDE 9: 5. Objectives]
+"Based on these gaps, our project has four clear objectives:
+1. Analyze and mathematically formulate why single-dataset validation fails.
+2. Design a bidirectional testbed harmonizing CICIDS2017 and UNSW-NB15 into a shared,
+   semantically aligned feature space.
+3. Benchmark five classifiers on same-dataset and cross-dataset regimes using Accuracy,
+   Precision, Recall, Macro-F1, MCC, and False Alarm Rate.
+4. Apply feature selection and CORAL domain-alignment to reduce the generalization gap,
+   and deploy an interactive Streamlit dashboard.
+
+I now invite Md Sabique Huda to walk through our methodology, expected outcomes, and timeline."
+
+
+================================================================================
+MEMBER 4: MD SABIQUE HUDA (Slides 10, 11, 12)
+Topic: Methodology Pipeline, Timeline, Expected Outcomes & Conclusion
+Time: ~3.5 Minutes
+================================================================================
+
+[HANDOVER ENTRY]:
+"Thank you, Bamelaai."
+
+[SLIDE 10: 6. Methodology / Planning of Work]
+"Our methodology follows an end-to-end 7-step pipeline:
+  • Step 1: Dataset Acquisition & Preprocessing — cleaning infinite/NaN values.
+  • Step 2: Semantic Feature Mapping — linking equivalent features (duration, packet rates).
+  • Step 3: Same-Dataset Baselines — establishing upper-bound ceilings (97%–99%).
+  • Step 4: Bidirectional Cross-Dataset Transfer — evaluating CICIDS → UNSW and UNSW → CICIDS.
+  • Step 5: Feature Selection & Domain Alignment — applying Mutual Information and CORAL
+    covariance alignment without requiring target labels.
+  • Step 6: Retrain & Evaluate — calculating the Generalization Recovery Ratio (GRR).
+  • Step 7: Streamlit Dashboard — creating a live security demonstrator.
+
+As shown in our 9-week timeline table:
+  • Weeks 1–2: Acquisition & analysis (Pynskhemlang)
+  • Weeks 2–4: Ontology & baseline models (Pynskhemlang, Tehjib)
+  • Weeks 4–6: Cross-dataset evaluation (Tehjib, Sabique)
+  • Weeks 6–7: Domain alignment mitigations (Bamelaai)
+  • Weeks 7–9: Streamlit dashboard, validation & final report (All members)."
+
+[SLIDE 11: 7. Expected Outcome]
+"Our project delivers five concrete deliverables:
+1. A Bidirectional Evaluation Harness: An automated Python pipeline for cross-dataset testing.
+2. An Empirical Generalization Map: Quantitative proof of performance collapse across 5 models.
+3. A Feature Alignment Toolkit: Reconciling CICFlowMeter and Argus/Zeek schemas with CORAL.
+4. A Classifier Robustness Ranking: Empirical ranking of which model architectures best
+   withstand covariate shift.
+5. An Interactive Streamlit Dashboard: A production-ready web app allowing security analysts
+   to simulate cross-dataset transfer and visualize confusion matrices in real time."
+
+[SLIDE 12: 8. References & Conclusion]
+"Our work is supported by peer-reviewed literature in IEEE TNSM, IEEE CSR, Software Quality
+Journal, and IEEE Access.
+
+In conclusion, our project takes intrusion detection out of the closed laboratory world
+and provides practical engineering solutions for real-world network deployment.
+
+On behalf of Pynskhemlang, Tehjib, Bamelaai, and myself, we thank our guide Mr. Abdul
+Kayum Ali sir, supervisor Mr. Debarbat Bharali sir, and the faculty members.
+
+We are now ready for your questions. Thank you!"
+
+================================================================================
+                          END OF TEAM DIVISION SCRIPT
+================================================================================

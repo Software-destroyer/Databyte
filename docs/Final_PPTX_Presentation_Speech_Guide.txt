@@ -1,0 +1,410 @@
+================================================================================
+         OFFICIAL PRESENTATION SPEECH & SLIDE-BY-SLIDE GUIDE
+                  BASED ON: final.pptx (12 SLIDES)
+              PROJECT: CROSS-DATASET INTRUSION DETECTION
+               Minor Project Synopsis | B.Tech CSE | USTM
+================================================================================
+
+TEAM & MODULE ALLOCATION (from Slide 1 & Slide 10):
+  • Pynskhemlang Marbaniang (2023/BCSE/0005) — Weeks 1–4: Ingestion, Cleaning & Mapping
+  • Tehjib Almas Junaid     (2023/BCSE/0032) — Weeks 2–6: Baseline Models & Cross-Transfer
+  • Bamelaai Marbaniang     (2023/BCSE/0045) — Weeks 6–7: Feature Selection & CORAL Alignment
+  • Md Sabique Huda         (2023/BCSE/0066) — Weeks 4–9: Cross-Testing & Streamlit Dashboard
+
+================================================================================
+SLIDE-BY-SLIDE SCRIPT (EXACTLY 12 SLIDES AS IN final.pptx)
+================================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 1: TITLE SLIDE
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT]:
+  - MINOR PROJECT SYNOPSIS on “Cross-Dataset Intrusion Detection”
+  - Team: Pynskhemlang Marbaniang, Tehjib Almas Junaid, Bamelaai Marbaniang, Md Sabique Huda
+  - Guide: Mr. Abdul Kayum Ali, Assistant Professor | Dept of Engineering & Technology | USTM
+
+[SPEECH — Speaker 1 / Any Member]:
+"Good morning, respected Chairperson, honourable guide Mr. Abdul Kayum Ali sir,
+and esteemed faculty members.
+
+We are here to present our Minor Project Synopsis titled 'Cross-Dataset Intrusion
+Detection.'
+
+Our team consists of Pynskhemlang Marbaniang, Tehjib Almas Junaid, Bamelaai
+Marbaniang, and Md Sabique Huda, from the Department of Computer Science and
+Engineering, University of Science & Technology, Meghalaya.
+
+Our research tackles a critical security problem: why machine learning models
+for cyber intrusion detection perform with near-100% accuracy in academic labs,
+yet fail catastrophically when deployed into real-world enterprise networks."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 2: 1. INTRODUCTION — i. Background of the Study
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT]:
+  - Network Intrusion Detection Systems (NIDS) as frontline perimeter defense
+  - Signature-based systems (Snort, Suricata, Zeek) — blind to zero-days
+  - ML/DL approaches (Decision Trees, Random Forests, SVM, XGBoost) — report 98%–99.5%
+    accuracy on benchmarks (CICIDS2017, CSE-CIC-IDS2018, UNSW-NB15)
+
+[SPEECH]:
+"Network Intrusion Detection Systems (NIDS) are the frontline defense inspecting
+network traffic in real time for malicious exploits, policy violations, and data
+exfiltration.
+
+Traditionally, networks relied on signature-based systems such as Snort, Suricata,
+and Zeek. While they have high precision on known attacks, they are fundamentally
+blind to zero-day exploits, evasive polymorphic malware, or slow reconnaissance.
+
+To overcome this, cybersecurity researchers shifted to Machine Learning and Deep
+Learning. Algorithms such as Decision Trees, Random Forests, Support Vector
+Machines, and XGBoost learn statistical flow patterns from network packets.
+In published academic papers, these models routinely report 98% to 99.5% accuracy
+on standard benchmark datasets like CICIDS2017 and UNSW-NB15.
+
+However, as we will see on the next slide, this near-perfect accuracy hides a
+dangerous operational illusion."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 3: ii. Problem Statement — The Same-Dataset Evaluation Illusion
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT]:
+  - In the Lab: Models trained & tested on same dataset (80/20 splits, k-fold CV).
+    Share identical network topology, tools, hosts, time windows — closed world.
+    Models memorize simulator artifacts, not real attack signatures.
+  - In Deployment: Moved to a different network (cross-dataset), face covariate
+    shift & concept drift.
+  - Collapse: Accuracy plummets from ~99% toward random guessing; MCC collapses to near-zero.
+  - Stat: 99% → near-random.
+
+[SPEECH]:
+"Here is the problem statement at the heart of our project.
+
+In academic laboratory setups, models are trained and tested on splits from the
+EXACT SAME dataset — typically using an 80/20 partition or k-fold cross-validation.
+Because training and test data share the exact same network topology, background
+operating systems, packet generation tooling, and capture time window, the model
+is operating in a 'closed world.' Instead of learning generalizable attack
+signatures, the model memorizes simulator-specific artifacts.
+
+When that model is actually deployed into a different network — what we call the
+cross-dataset setting — it encounters severe covariate shift and concept drift.
+
+As a result, the accuracy plummets from 99% down toward random guessing (40% to 60%),
+and the Matthews Correlation Coefficient (MCC) collapses toward zero. A system that
+appeared foolproof in the lab completely fails in production."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 4: iii. Importance of the Present Work & iv. Scope of the Study
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT]:
+  - Why This Matters:
+    • Deployed NIDS that fail under real-world drift create false confidence and leave networks exposed.
+    • Diagnosing and closing this generalization gap is essential for trustworthy, deployable ML security.
+  - Scope of the Study:
+    • 2 Datasets: CICIDS2017 (80+ features) & UNSW-NB15 (49 features)
+    • 5 Classifiers: Decision Tree, Random Forest, Logistic Regression, SVM, XGBoost
+    • Bidirectional Transfer: CICIDS2017 → UNSW-NB15 and UNSW-NB15 → CICIDS2017
+    • Mitigation Layer: Feature selection, domain-invariant normalization, CORAL alignment
+
+[SPEECH]:
+"Why does this research matter?
+If a deployed intrusion detection system fails under network drift, it generates a
+false sense of security while leaving enterprise networks completely exposed.
+Diagnosing and actively closing this gap is essential if we want trustworthy,
+deployable cybersecurity systems — not just models that win academic leaderboard scores.
+
+Our scope is precisely defined across four pillars:
+1. We evaluate the two premier global benchmark datasets: CICIDS2017 (with 80+ features)
+   and UNSW-NB15 (with 49 features).
+2. We benchmark five distinct classifier families: Decision Tree, Random Forest,
+   Logistic Regression, SVM, and XGBoost.
+3. We execute bidirectional transfer: testing both CICIDS to UNSW, and UNSW to CICIDS.
+4. We engineer an active mitigation layer combining statistical feature selection,
+   robust normalization, and CORAL covariance alignment."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 5: 2. Literature Review (Part 1)
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT TABLE]:
+  1. Verkerken et al. (2022) | Bidirectional cross-dataset evaluation, CICIDS2017 ↔ UNSW-NB15, multiple ML models | Cross-dataset transfer causes accuracy to plummet 28–42%; feature harmonization is mandatory
+  2. Cantone, Marrocco & Bria (2024) | 4 classifiers trained/tested pairwise across 4 CIC-family datasets | Intra-dataset MCC >99.6%; cross-dataset MCC collapses to near-zero (~40% best case)
+  3. Ahmim, Amangele & Moustafa (2024) | Cross-dataset experiments on UNSW-NB15 & TON_IoT with 7 shared features | Accuracy declines up to 35%; naive feature intersection fails to preserve detection
+
+[SPEECH]:
+"To place our work in context, we reviewed the key literature on cross-dataset NIDS:
+
+First, Verkerken et al. (2022) in the Journal of Network & Systems Management
+performed bidirectional cross-dataset evaluation between CICIDS2017 and UNSW-NB15.
+They proved that accuracy plummets by 28% to 42%, and they concluded that feature
+harmonization is mandatory.
+
+Second, Cantone et al. (2024) at IEEE CSR tested 4 classifiers across 4 datasets in
+the CIC family. They demonstrated that while intra-dataset MCC exceeds 99.6%, cross-
+dataset MCC collapses to near-zero (only ~40% in the best case).
+
+Third, Ahmim et al. (2024) evaluated UNSW-NB15 and TON_IoT, but restricted their
+analysis to a naive intersection of only 7 features, suffering an accuracy decline of up
+to 35% and proving that crude feature intersection alone is insufficient."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 6: 2. Literature Review (Part 2)
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT TABLE]:
+  4. Bertoli, Pereira & Saotome (2022) | DoS-detection models trained on CICIDS2017, tested on independent physical testbed | 25.63% avg accuracy degradation on transfer; models rely on non-transferable background features
+  5. Sarhan, Layeghy, Moustafa & Portmann (2021) | Standardized NetFlow-based feature extraction (43 attributes) across 4 NIDS benchmarks | Feature-set heterogeneity is the primary obstacle; standardized features improve transferability
+
+[SPEECH]:
+"Continuing our literature review:
+
+Fourth, Bertoli et al. (2022) trained DoS models on CICIDS2017 and tested them on an
+independent physical testbed, logging a 25.63% average accuracy degradation because
+classifiers heavily rely on non-transferable background features.
+
+Fifth, Sarhan et al. (2021) explored standardized NetFlow-based feature extraction
+across four NIDS benchmarks, confirming that feature-set heterogeneity is the single
+biggest barrier to transferability."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 7: 3. Research Gap — Three Pillars
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT]:
+  - Pillar I: Diagnosis vs. Remediation — Existing studies diagnose the collapse
+    but treat it as an observational dead-end rather than engineering active remediation.
+  - Pillar II: Semantic Feature Ontology Mismatch — CICIDS2017 (CICFlowMeter) and
+    UNSW-NB15 (Argus/Zeek) use incompatible naming, scales, and definitions — no
+    standardized alignment ontology exists between them.
+  - Pillar III: No Bidirectional Robustness Benchmark — Most studies test only one
+    transfer direction and never systematically compare how different classifier
+    families (tree-based vs. margin-based) withstand domain shift.
+
+[SPEECH — CRITICAL DEFENSE SLIDE]:
+"A rigorous synthesis of these papers reveals three critical research gaps:
+
+Pillar I: 'Diagnosis vs. Remediation.' This directly answers why our project is
+unique. Previous authors — like Verkerken et al. (2022) and Cantone et al. (2024) —
+observed the collapse, documented it, and stopped. They treated it as an observational
+dead-end. Our project moves from observational diagnosis to ACTIVE ENGINEERING REMEDIATION.
+We don't just show that accuracy drops — we engineer methods to bring it back!
+
+Pillar II: 'Semantic Feature Ontology Mismatch.' CICIDS uses CICFlowMeter with 80+
+features; UNSW uses Argus/Zeek with 49 features. No standardized semantic ontology
+currently bridges these two leading benchmark families.
+
+Pillar III: 'No Bidirectional Robustness Benchmark.' Prior works test unidirectional
+transfer and do not systematically benchmark which model architecture — tree-based
+like Random Forest and XGBoost versus margin-based like SVM — is intrinsically most
+resilient to domain shift."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 8: 4. Feasibility Study
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT]:
+  - Technical: Public datasets, mature Scikit-Learn/XGBoost, <6 GB RAM footprint via stratified subsampling
+  - Economic: 100% open-source toolchain, free datasets, free-tier Colab — net budget ₹0.00
+  - Operational: 4 modules map to 4 team members; Git/GitHub workflow; Streamlit dashboard
+  - Schedule & Risk: 8–10 week timeline; class imbalance and memory risks mitigated via
+    undersampling, SMOTE-NC, robust scaling
+
+[SPEECH]:
+"We conducted a comprehensive feasibility study across four dimensions:
+
+1. Technical: Both datasets are publicly hosted by university portals without licensing
+   fees. All five algorithms are natively implemented in Scikit-Learn and XGBoost.
+   Memory footprint is kept under 6 GB RAM using stratified subsampling (200k–500k records)
+   and streaming chunk ingestion.
+
+2. Economic: The entire software stack (Python, Pandas, Scikit-Learn, Streamlit) is
+   open-source. Free-tier Google Colab T4 GPUs provide auxiliary compute. Total project
+   expenditure is exactly ₹0.00.
+
+3. Operational: Decomposed into 4 modular engineering tasks mapped directly to our
+   4 team members, coordinated via Git and GitHub.
+
+4. Schedule & Risk: Planned across an 8-to-10 week semester timeline. Severe class
+   imbalance is resolved through stratified undersampling and SMOTE-NC; feature
+   scale disparities are handled via Robust and Quantile scaling."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 9: 5. Objectives
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT]:
+  1. Analyze and mathematically formulate why single-dataset validation fails (covariate shift, concept drift, artifact overfitting).
+  2. Design a bidirectional cross-dataset testbed harmonizing CICIDS2017 and UNSW-NB15 into a shared, semantically aligned feature space.
+  3. Implement and benchmark 5 classifiers (DT, RF, LR, SVM, XGBoost) on same-dataset and cross-dataset regimes using Accuracy, Precision, Recall, Macro-F1, MCC, and FAR.
+  4. Apply feature selection and domain-alignment techniques to reduce the generalization gap, and deploy an interactive Streamlit dashboard.
+
+[SPEECH]:
+"Our project is guided by four specific, actionable objectives:
+
+Objective 1: Analyze and mathematically formulate why single-dataset cross-validation
+fails to predict real-world performance, identifying the exact statistical mechanisms of
+covariate shift and artifact overfitting.
+
+Objective 2: Design and construct a standardized bidirectional testbed that reconciles
+heterogeneous features from CICIDS2017 and UNSW-NB15 into a unified semantic space.
+
+Objective 3: Implement, benchmark, and evaluate five representative ML classifiers across
+both intra-dataset baselines and cross-dataset transfer regimes using comprehensive
+metrics: Accuracy, Precision, Recall, Macro-F1, MCC, and False Alarm Rate.
+
+Objective 4: Formulate and empirically validate feature selection and CORAL domain-
+alignment techniques to close the generalization deficit, deploying an interactive
+Streamlit dashboard for real-time demonstration."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 10: 6. Methodology / Planning of Work
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT]:
+  - 7-Step Pipeline:
+      1. Dataset Acquisition & Preprocessing
+      2. Semantic Feature Mapping
+      3. Same-Dataset Baselines
+      4. Bidirectional Cross-Dataset Transfer
+      5. Feature Selection & Domain Alignment
+      6. Retrain & Evaluate (GRR)
+      7. Streamlit Dashboard
+  - Two symmetric transfer directions: CICIDS2017 → UNSW-NB15 and UNSW-NB15 → CICIDS2017
+  - Timeline & Team Table:
+      • Weeks 1–2: Acquisition & exploratory analysis (Pynskhemlang)
+      • Weeks 2–4: Feature ontology & baseline models (Pynskhemlang, Tehjib)
+      • Weeks 4–6: Bidirectional evaluation & diagnosis (Tehjib, Sabique)
+      • Weeks 6–7: Feature selection & domain alignment (Bamelaai)
+      • Weeks 7–9: Streamlit dashboard, validation & report (All members)
+
+[SPEECH]:
+"Our research methodology follows an end-to-end 7-step pipeline:
+  • Step 1: Ingest official CSV records, cap infinite flow rates, and clean missing values.
+  • Step 2: Build the semantic mapping dictionary linking equivalent features
+    (e.g., CICIDS 'Flow Duration' ↔ UNSW 'dur'; 'Flow Packets/s' ↔ 'rate').
+  • Step 3: Establish the same-dataset performance ceiling (expected 97%–99%).
+  • Step 4: Execute zero-shot bidirectional cross-dataset transfer (CICIDS → UNSW and
+    UNSW → CICIDS), exposing the performance drop.
+  • Step 5: Apply Mutual Information feature selection, Quantile transformation, and
+    Correlation Alignment (CORAL) to align feature covariance matrices without target labels.
+  • Step 6: Retrain models on aligned features and calculate the Generalization Recovery
+    Ratio (GRR) to measure how much lost performance was recovered.
+  • Step 7: Package the pipeline into an interactive Streamlit web dashboard.
+
+As shown in our 9-week timeline, each phase is assigned to specific team members to
+ensure smooth and timely execution."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 11: 7. Expected Outcome
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT]:
+  1. Bidirectional Evaluation Harness: Fully automated Python pipeline for cross-dataset NIDS benchmarking in both transfer directions.
+  2. Empirical Generalization Map: Quantified performance collapse (Accuracy, Macro-F1, MCC, FAR) across 5 ML models.
+  3. Feature Alignment Toolkit: Open-source ontology reconciling CICFlowMeter and Argus/Zeek schemas with CORAL mitigation.
+  4. Classifier Robustness Ranking: Empirical ranking of which architectures best withstand covariate shift.
+  5. Interactive Streamlit Dashboard: Production-ready web app for real-time cross-dataset simulation and visualization.
+
+[SPEECH]:
+"Upon completion, our project will deliver five tangible engineering and scientific
+outcomes:
+
+Deliverable 1: A modular, automated Python testbed that standardizes cross-dataset
+benchmarking in both directions.
+
+Deliverable 2: A comprehensive empirical map quantifying the performance deficit
+across 5 machine learning models using MCC, Macro-F1, and False Alarm Rates.
+
+Deliverable 3: An open-source semantic feature alignment toolkit that bridges
+CICFlowMeter and Argus/Zeek schemas, integrated with CORAL domain adaptation.
+
+Deliverable 4: A clear empirical ranking showing which machine learning architectures
+(tree ensembles vs. linear models vs. SVM) possess the greatest intrinsic resilience
+under network domain shift.
+
+Deliverable 5: A live, interactive Streamlit Security Operations Dashboard where
+analysts can select source/target datasets, toggle domain alignment on and off, and
+inspect confusion matrices and ROC curves in real time."
+
+[ACTION: Next Slide]
+
+
+────────────────────────────────────────────────────────────────────────────────
+SLIDE 12: 8. References
+────────────────────────────────────────────────────────────────────────────────
+[SLIDE CONTENT]:
+  - Ahmim, A., Amangele, P., & Moustafa, N. (2024). IEEE Access, 12, 68420–68432.
+  - Bertoli, G. de C., Pereira, L. A. J., & Saotome, O. (2022). Software Quality Journal, 30(4), 1073–1098.
+  - Cantone, M., Marrocco, C., & Bria, A. (2024). IEEE CSR 2024, 112–119.
+  - Sarhan, M., Layeghy, S., Moustafa, N., & Portmann, M. (2021). Mobile Networks & Applications, 26(4), 1735–1747.
+  - Verkerken, M., D'hooge, L., Wauters, T., De Turck, F., & Volckaert, B. (2022). IEEE TNSM, 19(4), 4196–4208.
+
+[SPEECH]:
+"Our work builds upon the foundational research listed here, strictly formatted in
+accordance with the APA 7th Edition citation standard:
+  • Verkerken et al. (2022) in IEEE Transactions on Network and Service Management.
+  • Cantone et al. (2024) in IEEE CSR.
+  • Bertoli et al. (2022) in Software Quality Journal.
+  • Ahmim et al. (2024) in IEEE Access.
+  • Sarhan et al. (2021) in Mobile Networks & Applications.
+
+In conclusion, our project moves machine learning intrusion detection beyond the
+illusory comfort of laboratory benchmarks toward deployable, domain-resilient security.
+
+On behalf of Pynskhemlang, Tehjib, Bamelaai, and myself, thank you very much for
+your time and guidance. We are now happy to answer your questions."
+
+[END OF PRESENTATION SPEECH]
+
+
+================================================================================
+EXAMINER DEFENSE CHEATSHEET (SPECIFIC TO final.pptx)
+================================================================================
+
+Q1: "In Slide 5, you cite Verkerken et al. (2022) who already tested CICIDS2017 ↔ UNSW-NB15.
+     How is your work different or new?"
+A1: "Sir/Madam, Verkerken et al. (2022) conducted an observational study. They observed that
+     accuracy drops by 28–42% and noted that 'feature harmonization is mandatory', but they
+     did NOT implement an active solution. They left it as an open question.
+     Our project represents Research Gap I: Diagnosis vs. Remediation (Slide 7). We actively
+     construct the semantic ontology, apply CORAL covariance alignment, evaluate the Generalization
+     Recovery Ratio (GRR), and deploy an interactive Streamlit tool. Verkerken diagnosed the problem;
+     we engineer the remedy."
+
+Q2: "In Slide 4, why did you choose CICIDS2017 and UNSW-NB15 specifically?"
+A2: "Because they represent the two most influential but structurally incompatible benchmark
+     families globally. CICIDS was captured on a 1 Gbps network using CICFlowMeter (80+ features),
+     whereas UNSW was captured on a 10 Gbps testbed using Argus/Zeek (49 features). Testing transfer
+     between them represents the most authentic simulation of deploying a model into an unseen network."
+
+Q3: "In Slide 10, how does CORAL alignment work without target labels?"
+A3: "CORAL is unsupervised. It calculates the covariance matrix of the source traffic and the
+     target traffic. It whitens the source features and recolors them using the target covariance.
+     Because it only needs traffic distributions and NOT labels, it is 100% practical for real-world
+     deployment where incoming target network traffic is unlabeled."
+
+================================================================================

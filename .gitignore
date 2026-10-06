@@ -1,0 +1,27 @@
+# Raw and generated datasets
+data/raw/**
+data/processed/**
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Trained models and generated reports/results
+models/**
+results/**
+reports/**
+artifacts/**
+
+# Python tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+*.egg-info/
+
+# Editor and operating-system files
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
