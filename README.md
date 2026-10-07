@@ -6,13 +6,16 @@ Cross-dataset intrusion detection research project using CICIDS2017 and UNSW-NB1
 
 - `src/config.py`: project paths, random seed, semantic feature names, and model hyperparameters.
 - `src/preprocessing.py`: chunked CSV cleaning, binary labels, balanced sampling, and Parquet export.
-- `tests/mock_data_generator.py`: small synthetic CICIDS2017 and UNSW-NB15 CSVs.
+- `src/feature_mapping.py`: canonical semantic feature mapping reconciling CICIDS2017 and UNSW-NB15 schemas.
+- `tests/mock_data_generator.py`: small synthetic CICIDS2017 and UNSW-NB15 CSVs with balanced class distributions.
 - `tests/test_preprocessing.py`: preprocessing checks for both mock datasets.
+- `tests/test_feature_mapping.py`: verification of canonical feature alignment and column ordering consistency.
+- `tests/test_pipeline.py`: end-to-end pipeline integration tests.
 - `requirements.txt`: pinned Python dependencies.
 
 ## Next implementation step
 
-Implement `src/feature_mapping.py` to reconcile the shared CICIDS2017 and UNSW-NB15 behavioral features into a common canonical schema. Add tests confirming both datasets produce the same ordered feature columns.
+Module 2 (Tehjib Almas Junaid): Implement `src/baseline_models.py` and `src/cross_dataset.py` for same-dataset and cross-dataset evaluations using the canonical feature datasets produced by Module 1.
 
 ## Module ownership
 

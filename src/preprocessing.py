@@ -166,8 +166,8 @@ class DataPreprocessor:
         features = self._features(chunk, label_column).reindex(columns=kept_columns)
         for column in kept_columns:
             values = pd.to_numeric(features[column], errors="coerce").to_numpy(
-                dtype=np.float64, na_value=np.nan
-            )
+                dtype=np.float64, na_value=np.nan, copy=True
+            ).copy()
             infinities = np.isinf(values)
             values[infinities] = thresholds.get(column, medians[column])
             missing = np.isnan(values)

@@ -31,7 +31,10 @@ def generate_mock_data(
     cic_dir.mkdir(parents=True, exist_ok=True)
     unsw_dir.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(seed)
-    attacks = rng.random(rows) < 0.2
+    attack_count = max(rows // 2, 2)
+    attacks = np.zeros(rows, dtype=bool)
+    attacks[:attack_count] = True
+    rng.shuffle(attacks)
     # Include rate infinities, NaNs, and a constant field to exercise cleanup.
     cic_rate = rng.lognormal(mean=3.0, sigma=0.8, size=rows)
     cic_rate[0] = np.inf
