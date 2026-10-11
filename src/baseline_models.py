@@ -14,9 +14,11 @@ import numpy as np
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
+    classification_report,
     confusion_matrix,
     f1_score,
     matthews_corrcoef,
@@ -30,17 +32,28 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
+from joblib import dump
 
-from src.config import MODEL_HYPERPARAMETERS, RANDOM_SEED
+from src.config import MODEL_HYPERPARAMETERS, MODELS_DIR, RANDOM_SEED
 
 DEFAULT_MODELS = (
     "decision_tree",
     "random_forest",
     "logistic_regression",
-    "svm_linear",
-    "svm_rbf",
-    "xgboost",
+    "knn",
+    "svm",
 )
+MODEL_DISPLAY_NAMES = {
+    "random_forest": "RF",
+    "decision_tree": "DT",
+    "logistic_regression": "LR",
+    "knn": "KNN",
+    "svm": "SVM",
+}
+MODEL_KEYS_BY_ALIAS = {
+    **{key: key for key in MODEL_DISPLAY_NAMES},
+    **{value.casefold(): key for key, value in MODEL_DISPLAY_NAMES.items()},
+}
 LABEL_COLUMN_CANDIDATES = ("label", "class", "attack_cat")
 METRIC_COLUMNS = (
     "accuracy",
@@ -145,7 +158,7 @@ def split_features_and_labels(
 
 def build_estimator(model_name: str):
     """Construct one configured classifier by its stable config key."""
-    key = model_name.strip().casefold()
+    key = MODEL_KEYS_BY_ALIAS.get(model_name.strip().casefold(), model_name.strip().casefold())
     if key not in MODEL_HYPERPARAMETERS:
         raise ValueError(f"Unknown model {model_name!r}; available models: {', '.join(DEFAULT_MODELS)}")
     params = deepcopy(MODEL_HYPERPARAMETERS[key])
@@ -155,23 +168,20 @@ def build_estimator(model_name: str):
         return RandomForestClassifier(**params)
     if key == "logistic_regression":
         return LogisticRegression(**params)
-    if key in {"svm_linear", "svm_rbf"}:
+    if key == "knn":
+        return KNeighborsClassifier(**params)
+    if key == "svm":
         return SVC(**params)
-    if key == "xgboost":
-        try:
-            from xgboost import XGBClassifier
-        except ImportError as exc:
-            raise ImportError("XGBoost is required for the xgboost model; install requirements.txt") from exc
-        return XGBClassifier(**params)
     raise AssertionError("Model configuration and factory are inconsistent")
 
 
 def build_pipeline(model_name: str) -> Pipeline:
     """Build a leakage-safe imputation/scaling/classifier pipeline."""
     steps = [("imputer", SimpleImputer(strategy="median", keep_empty_features=True))]
-    if model_name in {"logistic_regression", "svm_linear", "svm_rbf"}:
+    key = MODEL_KEYS_BY_ALIAS.get(model_name.strip().casefold(), model_name.strip().casefold())
+    if key in {"logistic_regression", "knn", "svm"}:
         steps.append(("scaler", StandardScaler()))
-    steps.append(("classifier", build_estimator(model_name)))
+    steps.append(("classifier", build_estimator(key)))
     return Pipeline(steps)
 
 
@@ -212,7 +222,8 @@ def positive_class_scores(estimator: Pipeline, features: pd.DataFrame) -> np.nda
     """Return positive-class probabilities or decision scores if available."""
     if hasattr(estimator, "predict_proba"):
         probabilities = estimator.predict_proba(features)
-        classes = estimator.named_steps["classifier"].classes_
+        classifier = estimator.named_steps["classifier"] if isinstance(estimator, Pipeline) else estimator
+        classes = classifier.classes_
         positive_index = int(np.flatnonzero(classes == 1)[0])
         return np.asarray(probabilities[:, positive_index], dtype=np.float64)
     if hasattr(estimator, "decision_function"):
@@ -285,3 +296,85 @@ def evaluate_dataset(
 ) -> pd.DataFrame:
     """Convenience alias for the same-dataset baseline evaluation."""
     return evaluate_holdout_models(data, dataset=dataset, **kwargs)
+
+
+def get_models() -> dict[str, object]:
+    """Return fresh configured instances of the five project classifiers."""
+    return {display: build_estimator(key) for key, display in MODEL_DISPLAY_NAMES.items()}
+
+
+def train_and_evaluate(
+    X_train,
+    y_train,
+    X_test,
+    y_test,
+    model_name: str,
+    model,
+) -> dict:
+    """Fit one classifier and return the metrics required by the project brief."""
+    train_labels = encode_binary_labels(pd.Series(y_train))
+    test_labels = encode_binary_labels(pd.Series(y_test))
+    model.fit(X_train, train_labels)
+    predictions = np.asarray(model.predict(X_test), dtype=np.int8)
+    metrics = classification_metrics(
+        test_labels, predictions, positive_class_scores(model, X_test)
+        if isinstance(model, Pipeline) else (
+            model.predict_proba(X_test)[:, int(np.flatnonzero(model.classes_ == 1)[0])]
+            if hasattr(model, "predict_proba") else
+            model.decision_function(X_test) if hasattr(model, "decision_function") else None
+        )
+    )
+    return {
+        "model_name": model_name,
+        "accuracy": metrics["accuracy"],
+        "precision": metrics["precision"],
+        "recall": metrics["recall"],
+        "f1": float(f1_score(test_labels, predictions, zero_division=0)),
+        "mcc": metrics["mcc"],
+        "confusion_matrix": confusion_matrix(test_labels, predictions, labels=[0, 1]),
+        "classification_report": classification_report(
+            test_labels, predictions, labels=[0, 1], target_names=["benign", "attack"],
+            zero_division=0,
+        ),
+    }
+
+
+def run_same_dataset_evaluation(
+    df: pd.DataFrame,
+    dataset_name: str,
+    test_size: float = 0.2,
+) -> pd.DataFrame:
+    """Run stratified same-dataset evaluation and persist each scaler/model."""
+    if not 0 < test_size < 1:
+        raise ValueError("test_size must be between 0 and 1")
+    features, labels, _ = split_features_and_labels(df)
+    if np.bincount(labels, minlength=2).min() < 2:
+        raise ValueError("Each class needs at least two rows for a stratified split")
+    train_idx, test_idx = train_test_split(
+        np.arange(len(labels)), test_size=test_size, random_state=RANDOM_SEED,
+        stratify=labels,
+    )
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(features.iloc[train_idx])
+    X_test = scaler.transform(features.iloc[test_idx])
+    MODELS_DIR.mkdir(parents=True, exist_ok=True)
+    safe_dataset_name = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in dataset_name)
+    dump(scaler, MODELS_DIR / f"{safe_dataset_name}_scaler.joblib")
+    rows = []
+    for model_name, model in get_models().items():
+        metrics = train_and_evaluate(
+            X_train, labels[train_idx], X_test, labels[test_idx], model_name, model
+        )
+        dump(model, MODELS_DIR / f"{safe_dataset_name}_{model_name.casefold()}.joblib")
+        rows.append({
+            "model": model_name,
+            "dataset": dataset_name,
+            "accuracy": metrics["accuracy"],
+            "precision": metrics["precision"],
+            "recall": metrics["recall"],
+            "f1": metrics["f1"],
+            "mcc": metrics["mcc"],
+        })
+    return pd.DataFrame(
+        rows, columns=["model", "dataset", "accuracy", "precision", "recall", "f1", "mcc"]
+    )
