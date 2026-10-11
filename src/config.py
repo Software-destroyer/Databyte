@@ -52,9 +52,14 @@ SEMANTIC_FEATURE_MAPPING = {
 }
 
 MODEL_HYPERPARAMETERS = {
-    "decision_tree": {"criterion": "gini", "random_state": RANDOM_SEED},
+    "decision_tree": {
+        "criterion": "gini",
+        "max_depth": 20,
+        "random_state": RANDOM_SEED,
+    },
     "random_forest": {
-        "n_estimators": 100,
+        "n_estimators": 200,
+        "max_depth": 20,
         "random_state": RANDOM_SEED,
         "n_jobs": -1,
     },
@@ -63,14 +68,6 @@ MODEL_HYPERPARAMETERS = {
         "max_iter": 1_000,
         "random_state": RANDOM_SEED,
     },
-    "svm_linear": {"kernel": "linear", "probability": True, "random_state": RANDOM_SEED},
-    "svm_rbf": {"kernel": "rbf", "probability": True, "random_state": RANDOM_SEED},
-    "xgboost": {
-        "max_depth": 6,
-        "learning_rate": 0.1,
-        "n_estimators": 100,
-        "random_state": RANDOM_SEED,
-        "n_jobs": -1,
-        "eval_metric": "logloss",
-    },
+    "knn": {"n_neighbors": 5, "metric": "minkowski", "n_jobs": -1},
+    "svm": {"kernel": "rbf", "C": 1.0, "gamma": "scale", "random_state": RANDOM_SEED},
 }
