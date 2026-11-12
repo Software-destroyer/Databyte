@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
@@ -28,31 +27,35 @@ from sklearn.metrics import (
 )
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.svm import SVC
+from sklearn.svm import SVC, LinearSVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from joblib import dump
 
-from src.config import MODEL_HYPERPARAMETERS, MODELS_DIR, RANDOM_SEED
+from src.config import MODEL_HYPERPARAMETERS, MODELS_DIR, RANDOM_SEED, RBF_SVM_MAX_TRAIN_ROWS
 
 DEFAULT_MODELS = (
     "decision_tree",
     "random_forest",
     "logistic_regression",
-    "knn",
-    "svm",
+    "svm_linear",
+    "svm_rbf",
+    "xgboost",
 )
 MODEL_DISPLAY_NAMES = {
-    "random_forest": "RF",
-    "decision_tree": "DT",
-    "logistic_regression": "LR",
-    "knn": "KNN",
-    "svm": "SVM",
+    "random_forest": "Random Forest",
+    "decision_tree": "Decision Tree",
+    "logistic_regression": "Logistic Regression",
+    "svm_linear": "SVM Linear",
+    "svm_rbf": "SVM RBF",
+    "xgboost": "XGBoost",
 }
 MODEL_KEYS_BY_ALIAS = {
     **{key: key for key in MODEL_DISPLAY_NAMES},
     **{value.casefold(): key for key, value in MODEL_DISPLAY_NAMES.items()},
+    "dt": "decision_tree", "rf": "random_forest", "lr": "logistic_regression",
+    "svm": "svm_rbf", "linear_svm": "svm_linear", "rbf_svm": "svm_rbf", "xgb": "xgboost",
 }
 LABEL_COLUMN_CANDIDATES = ("label", "class", "attack_cat")
 METRIC_COLUMNS = (
@@ -168,10 +171,14 @@ def build_estimator(model_name: str):
         return RandomForestClassifier(**params)
     if key == "logistic_regression":
         return LogisticRegression(**params)
-    if key == "knn":
-        return KNeighborsClassifier(**params)
-    if key == "svm":
+    if key == "svm_linear":
+        params.pop("kernel", None)
+        return LinearSVC(**params)
+    if key == "svm_rbf":
         return SVC(**params)
+    if key == "xgboost":
+        from xgboost import XGBClassifier
+        return XGBClassifier(**params)
     raise AssertionError("Model configuration and factory are inconsistent")
 
 
@@ -179,7 +186,7 @@ def build_pipeline(model_name: str) -> Pipeline:
     """Build a leakage-safe imputation/scaling/classifier pipeline."""
     steps = [("imputer", SimpleImputer(strategy="median", keep_empty_features=True))]
     key = MODEL_KEYS_BY_ALIAS.get(model_name.strip().casefold(), model_name.strip().casefold())
-    if key in {"logistic_regression", "knn", "svm"}:
+    if key in {"logistic_regression", "svm_linear", "svm_rbf"}:
         steps.append(("scaler", StandardScaler()))
     steps.append(("classifier", build_estimator(key)))
     return Pipeline(steps)
@@ -237,6 +244,18 @@ def class_counts(labels: Sequence[int]) -> tuple[int, int]:
     return int(np.count_nonzero(values == 0)), int(np.count_nonzero(values == 1))
 
 
+def select_training_indices(labels: Sequence[int], indices: Sequence[int], model_name: str,
+                            random_state: int = RANDOM_SEED) -> np.ndarray:
+    """Bound RBF-SVM's quadratic training cost using a stratified row cap."""
+    selected = np.asarray(indices, dtype=np.int64)
+    key = MODEL_KEYS_BY_ALIAS.get(model_name.strip().casefold(), model_name.strip().casefold())
+    if key != "svm_rbf" or len(selected) <= RBF_SVM_MAX_TRAIN_ROWS:
+        return selected
+    capped, _ = train_test_split(selected, train_size=RBF_SVM_MAX_TRAIN_ROWS,
+        stratify=np.asarray(labels, dtype=np.int8)[selected], random_state=random_state)
+    return np.sort(capped)
+
+
 def evaluate_holdout_models(
     frame: pd.DataFrame,
     dataset: str,
@@ -263,12 +282,13 @@ def evaluate_holdout_models(
     selected_models = tuple(models) if models is not None else DEFAULT_MODELS
     if not selected_models:
         raise ValueError("At least one model must be selected")
-    train_benign, train_attack = class_counts(labels[train_idx])
     test_benign, test_attack = class_counts(labels[test_idx])
     rows = []
     for model_name in selected_models:
+        model_train_idx = select_training_indices(labels, train_idx, model_name, random_state)
+        train_benign, train_attack = class_counts(labels[model_train_idx])
         estimator = build_pipeline(model_name)
-        estimator.fit(features.iloc[train_idx], labels[train_idx])
+        estimator.fit(features.iloc[model_train_idx], labels[model_train_idx])
         predictions = estimator.predict(features.iloc[test_idx]).astype(np.int8)
         scores = positive_class_scores(estimator, features.iloc[test_idx])
         row = {
@@ -277,7 +297,7 @@ def evaluate_holdout_models(
             "test_domain": dataset,
             "evaluation_mode": "same_dataset_holdout",
             "model": model_name,
-            "n_train": int(len(train_idx)),
+            "n_train": int(len(model_train_idx)),
             "n_test": int(len(test_idx)),
             "train_benign": train_benign,
             "train_attack": train_attack,

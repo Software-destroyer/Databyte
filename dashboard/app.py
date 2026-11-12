@@ -75,6 +75,8 @@ def load_results() -> tuple[pd.DataFrame, bool]:
     if real_path.is_file():
         try:
             df = pd.read_csv(real_path)
+            if "data_source" in df.columns and df["data_source"].eq("synthetic_demo").all():
+                return df.drop(columns=["data_source"]), True
             return df, False
         except Exception as exc:
             st.warning(f"Could not parse {real_path}: {exc}.  Falling back to mock data.")

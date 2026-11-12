@@ -1,66 +1,59 @@
 # Databyte
 
-Cross-dataset intrusion detection research project using CICIDS2017 and UNSW-NB15.
+Cross-dataset intrusion detection evaluation using CICIDS2017 and UNSW-NB15. The project trains standard classifiers, measures same-dataset performance, tests zero-shot transfer in both directions, and evaluates unsupervised CORAL alignment.
 
-## Current implementation
+## Pipeline
 
-- `src/config.py`: project paths, random seed, semantic feature names, and model hyperparameters.
-- `src/preprocessing.py`: chunked CSV cleaning, binary labels, balanced sampling, and Parquet export.
-- `src/evaluation.py`: consolidated evaluation, GRR computation, ablation summaries, and metric reporting (Module 4).
-- `dashboard/app.py`: Streamlit/Plotly SOC-style dashboard for interactive inspection of results (Module 4).
-- `main.py`: CLI orchestration for mock/small workflows and full pipeline steps (Module 4).
-- `tests/mock_data_generator.py`: small synthetic CICIDS2017 and UNSW-NB15 CSVs.
-- `tests/test_preprocessing.py`: preprocessing checks for both mock datasets.
-- `tests/test_evaluation.py`: evaluation consolidation, GRR, and ablation tests (Module 4).
-- `tests/test_cli.py`: CLI argument parsing and error handling tests (Module 4).
-- `requirements.txt`: pinned Python dependencies.
+1. Read one CSV, a directory of CSVs, or a list of CSVs in 50,000-row chunks. UNSW's four raw partitions are preferred when present; metadata and duplicate train/test copies are excluded.
+2. Encode benign/normal and attack labels, estimate medians and the 99.9th-percentile infinity replacement from bounded per-feature samples, remove constant numeric columns, and create a class-balanced Parquet sample capped at 200,000 rows.
+3. Map both datasets to eight shared numeric flow features. CIC Flow Duration is converted from microseconds to seconds. The official UNSW raw schema has no packet-rate column, so packet rate is derived from directional packet counts divided by duration. Nonmatching categorical features are excluded.
+4. Evaluate configured Decision Tree, Random Forest (100 trees), Logistic Regression, linear/RBF SVM, and XGBoost classifiers using stratified holdout baselines and bidirectional zero-shot transfer. Imputation/scaling are fit on source training data. RBF-SVM uses a stratified cap of 10,000 training rows to keep its quadratic kernel cost practical; the recorded `n_train` is the actual number used.
+5. Compare Wasserstein, KL, and MMD divergence; run CORAL using source training rows and unlabeled target features; evaluate aligned source models on the target.
+6. Consolidate metrics, calculate GRR and deltas, then inspect them in the Streamlit dashboard.
 
-## Next implementation step
-
-Implement `src/feature_mapping.py` to reconcile the shared CICIDS2017 and UNSW-NB15 behavioral features into a common canonical schema. Add tests confirming both datasets produce the same ordered feature columns.
-
-## CLI usage (Module 4)
+## Setup
 
 ```powershell
-# Quick demo with mock data (no datasets needed)
-python main.py mock
-
-# Launch the interactive dashboard
-python main.py dashboard
-
-# Generate mock CSV fixtures
-python main.py generate-mock --rows 500
-
-# Full pipeline (requires real CSV files)
-python main.py run --cicids data/raw/cicids2017/file.csv --unsw data/raw/unsw_nb15/file.csv
-
-# Individual pipeline steps
-python main.py preprocess --cicids <csv> --unsw <csv>
-python main.py baselines [--models decision_tree random_forest]
-python main.py transfer  [--models decision_tree random_forest]
-python main.py evaluate  [--results-csv results/consolidated_results.csv]
-```
-
-## Module ownership
-
-1. **Pynskhemlang Marbaniang — ingestion, cleaning, and semantic mapping:** preprocessing, canonical feature mapping, and related tests.
-2. **Tehjib Almas Junaid — ML baselines and transfer:** same-dataset model evaluation and bidirectional zero-shot cross-dataset evaluation.
-3. **Bamelaai Marbaniang — divergence and alignment:** Wasserstein/KL/MMD analysis, feature selection/scaling, and unsupervised CORAL.
-4. **Md Sabique Huda — evaluation and application:** metrics, GRR/ablations, Streamlit dashboard, Plotly visualizations, and CLI orchestration.
-
-## Generate mock input data
-
-```powershell
-python tests/mock_data_generator.py
-```
-
-This writes files beneath `data/raw/cicids2017/` and `data/raw/unsw_nb15/`.
-
-## Run tests
-
-```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m pytest
 ```
 
-Raw/processed data, trained models, generated results, and Python caches are ignored by Git. Reference presentations and research documents are kept in `docs/`.
+## Run
+
+Place the extracted CSV files in folders outside Git if preferred. Pass either a dataset folder (the pipeline selects its CSV partitions) or a single CSV file:
+
+```powershell
+python main.py run --cicids "D:\datasets\cicids2017\MachineLearningCSV" --unsw "D:\datasets\unsw_nb15\CSV Files"
+```
+
+Run individual steps after preprocessing:
+
+```powershell
+python main.py preprocess --cicids <CICIDS-folder-or-csv> --unsw <UNSW-folder-or-csv>
+python main.py baselines
+python main.py transfer
+python main.py align
+python main.py evaluate
+python main.py dashboard
+```
+
+Generate miniature synthetic input files and run a demo without downloaded data:
+
+```powershell
+python main.py generate-mock --rows 1000
+python main.py run --cicids data/raw/cicids2017/cicids2017_mock.csv --unsw data/raw/unsw_nb15/unsw_nb15_mock.csv --models decision_tree
+```
+
+The `mock` command creates explicitly marked synthetic dashboard results; never cite those values as experimental findings. Run `python -m pytest` for the test suite.
+
+## Outputs
+
+Cleaned and canonical Parquet files are written to `data/processed/`. Model metrics and divergence tables are written to `results/`. `main.py run` creates same-dataset, raw transfer, aligned transfer, divergence, consolidated, and GRR CSV reports. Raw datasets, generated outputs, models, results, archive review copies, and environments are excluded from Git.
+
+## Research scope
+
+See [docs/IMPLEMENTATION_STATUS.txt](docs/IMPLEMENTATION_STATUS.txt) for the completed real-data run, mean results, and scope notes about older draft materials.
+
+
+This is an ML evaluation framework/tool that uses established classifier families (Decision Tree, Random Forest, Logistic Regression, SVM, and XGBoost) rather than proposing a new model architecture. The shared feature set and data-selection procedure should be documented in the final report; synthetic smoke-test scores are only software checks.

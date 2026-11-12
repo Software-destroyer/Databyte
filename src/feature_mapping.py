@@ -95,6 +95,22 @@ class FeatureMapper:
                     matched_col = columns_lookup[cand_clean]
                     break
 
+            if matched_col is None and canonical_name == "flow_packet_rate" and dataset_key == "unsw_nb15":
+                # The official raw UNSW 49-column partitions omit `rate`.
+                # Derive packets/second using the equivalent directional
+                # packet counts and flow duration in seconds.
+                def find_column(names: tuple[str, ...]) -> str:
+                    for name in names:
+                        hit = columns_lookup.get(name.casefold())
+                        if hit is not None:
+                            return hit
+                    raise KeyError(f"UNSW raw input is missing required columns {names}")
+                duration = pd.to_numeric(df[find_column(("dur",))], errors="coerce").to_numpy(dtype=np.float64)
+                packets = (pd.to_numeric(df[find_column(("spkts",))], errors="coerce").to_numpy(dtype=np.float64)
+                           + pd.to_numeric(df[find_column(("dpkts",))], errors="coerce").to_numpy(dtype=np.float64))
+                values_array = np.divide(packets, duration, out=np.zeros_like(packets), where=np.isfinite(duration) & (duration > 0))
+                mapped_series[canonical_name] = pd.Series(values_array, index=df.index)
+                continue
             if matched_col is None:
                 raise KeyError(
                     f"Required column for canonical feature '{canonical_name}' "
@@ -102,6 +118,10 @@ class FeatureMapper:
                 )
 
             values = pd.to_numeric(df[matched_col], errors="coerce").astype(np.float64)
+            # CICFlowMeter reports Flow Duration in microseconds; UNSW dur is
+            # in seconds. Convert both to seconds before cross-domain modeling.
+            if canonical_name == "flow_duration" and dataset_key == "cicids2017":
+                values = values / 1_000_000.0
             mapped_series[canonical_name] = values
 
         # Resolve label column

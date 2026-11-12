@@ -32,6 +32,7 @@ def test_mock_data_is_cleaned_and_exported(tmp_path: Path, dataset: str) -> None
     cleaned = pd.read_parquet(output)
     assert len(cleaned) == 100
     assert cleaned["label"].value_counts().to_dict() == {0: 50, 1: 50}
+    assert pd.api.types.is_integer_dtype(cleaned["label"])
     assert not cleaned.isna().any().any()
     assert np.isfinite(cleaned.select_dtypes(include=[np.number]).to_numpy()).all()
     assert "constant" not in {name.casefold() for name in cleaned.columns}

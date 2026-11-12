@@ -1,0 +1,44 @@
+DATABYTE IMPLEMENTATION STATUS AND REAL-DATA RUN
+Generated: 2026-11-12
+
+PROJECT TYPE
+Databyte is a cross-dataset evaluation framework. It trains established ML classifiers to measure generalization; it does not propose a new model architecture.
+
+IMPLEMENTED WORKFLOW
+1. Streams CICIDS2017 and UNSW-NB15 CSV partitions in 50,000-row chunks.
+2. Encodes benign/normal as 0 and attack as 1; replaces infinities with a bounded-sample estimate of the 99.9th percentile, imputes missing numeric values with bounded-sample medians, and drops constant numeric columns.
+3. Creates a deterministic, stratified, class-balanced sample capped at 200,000 rows per dataset.
+4. Maps eight shared flow features: duration in seconds, forward/backward packet counts, forward/backward byte totals, packet rate, and forward/backward mean packet size. The official raw UNSW files do not include a rate field, so packet rate is derived as (source packets + destination packets) / duration. CIC flow duration is converted from microseconds to seconds.
+5. Trains Decision Tree, 100-tree Random Forest, Logistic Regression, linear SVM, RBF SVM, and XGBoost (depth 6, learning rate 0.1).
+6. Runs stratified same-dataset holdouts, bidirectional zero-shot transfer, Wasserstein/KL/MMD divergence analysis, and unsupervised CORAL alignment. Source holdout records are excluded from fit and CORAL; target labels are used only for final scoring.
+7. Consolidates metric tables, calculates Generalization Recovery Rate (GRR) and raw-to-aligned metric differences, and provides a Streamlit dashboard.
+
+REAL-DATA RUN
+The raw input files remained outside Git in D:\PROJECT. The run selected eight CICIDS2017 CSV files and the four raw UNSW-NB15 partitions, skipping UNSW feature metadata and duplicate train/test copies. Each dataset produced 200,000 rows: 100,000 benign/normal and 100,000 attack.
+
+Mean metrics across the six configured model variants and both directions:
+
+Mode                         Accuracy   Macro-F1   MCC
+Same-dataset holdout          0.901      0.899      0.808
+Raw zero-shot transfer        0.496      0.407      0.017
+After CORAL alignment         0.544      0.489      0.101
+
+These are results for the balanced 200,000-row samples, not full-dataset prevalence estimates. CORAL improved the cross-direction averages in this run, but it did not improve every model or every metric. Use the CSVs for model-by-model analysis; do not report only the averages.
+
+OUTPUTS
+Cleaned and canonical Parquet datasets: data/processed/
+Per-mode metrics: results/baseline_results.csv, results/cross_dataset_results.csv, results/aligned_results.csv
+Distribution differences: results/divergence_report.csv
+Combined metrics and GRR: results/consolidated_results.csv, results/grr_report.csv
+These generated files are ignored by Git; rerun the pipeline to regenerate them.
+
+CHECKS
+The repository test suite passes: 54 passed. A complete synthetic run through all six model variants also completed successfully. Synthetic demo results are marked as synthetic_demo and are not research findings.
+
+SCOPE LIMITS AND DOCUMENTATION NOTE
+The shared semantic mapping currently contains eight numeric features. Older draft presentation documents describe around 20 mapped features and mention mutual-information selection, RFE, or quantile transformation; those are not implemented in this code and should be treated as proposed methods, not completed work. Several drafts contain illustrative accuracy ranges; they are not this project’s measured results. The bounded statistics sample makes preprocessing memory independent of raw file size, so imputation medians and the 99.9th-percentile replacement are estimates. RBF SVM is stratified-capped at 10,000 training rows because its kernel cost grows quadratically; output n_train records the actual classifier training count.
+
+REPRODUCIBILITY
+From the project root, run:
+python main.py run --cicids "D:\PROJECT\MachineLearningCSV\MachineLearningCVE" --unsw "D:\PROJECT\OneDrive_2_10-7-2026\CSV Files"
+Then run `python -m pytest` to check the code.

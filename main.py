@@ -106,6 +106,9 @@ def cmd_mock(args: argparse.Namespace) -> None:
     LOGGER.info("Generating mock evaluation results...")
     mock = generate_mock_results(seed=args.seed)
     consolidated = consolidate_results(mock)
+    # Keep synthetic demonstration rows visibly marked so they cannot be
+    # mistaken for experimental results in the dashboard or a report.
+    consolidated["data_source"] = "synthetic_demo"
 
     output_dir = _ensure_dir(RESULTS_DIR)
     output_path = output_dir / "consolidated_results.csv"
@@ -147,13 +150,19 @@ def cmd_preprocess(args: argparse.Namespace) -> None:
     _check_module("src.preprocessing", "Module 1 - Preprocessing")
     from src.preprocessing import DataPreprocessor
 
-    _check_file(Path(args.cicids), "CICIDS-2017 CSV")
-    _check_file(Path(args.unsw), "UNSW-NB15 CSV")
+    for raw_path, label in ((Path(args.cicids), "CICIDS-2017 CSV path"),
+                            (Path(args.unsw), "UNSW-NB15 CSV path")):
+        if not raw_path.exists():
+            LOGGER.error("%s not found: %s", label, raw_path)
+            raise SystemExit(1)
 
     processor = DataPreprocessor(output_dir=args.output_dir)
     paths = processor.process_datasets(args.cicids, args.unsw)
+    from src.feature_mapping import FeatureMapper
+    mapper = FeatureMapper(output_dir=args.output_dir)
     for dataset, path in paths.items():
-        LOGGER.info("Preprocessed %s -> %s", dataset, path)
+        aligned = mapper.process_file(path, dataset=dataset)
+        LOGGER.info("Preprocessed %s -> %s; canonical features -> %s", dataset, path, aligned)
 
 
 # -- Command: baselines ---------------------------------------------------
@@ -165,10 +174,11 @@ def cmd_baselines(args: argparse.Namespace) -> None:
 
     import pandas as pd
 
-    cic_path = PROCESSED_DATA_DIR / "cic_cleaned.parquet"
-    unsw_path = PROCESSED_DATA_DIR / "unsw_cleaned.parquet"
-    _check_file(cic_path, "Preprocessed CICIDS-2017 Parquet")
-    _check_file(unsw_path, "Preprocessed UNSW-NB15 Parquet")
+    processed_dir = Path(getattr(args, "output_dir", getattr(args, "processed_dir", PROCESSED_DATA_DIR)))
+    cic_path = processed_dir / "cic_aligned.parquet"
+    unsw_path = processed_dir / "unsw_aligned.parquet"
+    _check_file(cic_path, "Canonical CICIDS-2017 Parquet")
+    _check_file(unsw_path, "Canonical UNSW-NB15 Parquet")
 
     cic_df = pd.read_parquet(cic_path)
     unsw_df = pd.read_parquet(unsw_path)
@@ -193,10 +203,11 @@ def cmd_transfer(args: argparse.Namespace) -> None:
 
     import pandas as pd
 
-    cic_path = PROCESSED_DATA_DIR / "cic_cleaned.parquet"
-    unsw_path = PROCESSED_DATA_DIR / "unsw_cleaned.parquet"
-    _check_file(cic_path, "Preprocessed CICIDS-2017 Parquet")
-    _check_file(unsw_path, "Preprocessed UNSW-NB15 Parquet")
+    processed_dir = Path(getattr(args, "output_dir", getattr(args, "processed_dir", PROCESSED_DATA_DIR)))
+    cic_path = processed_dir / "cic_aligned.parquet"
+    unsw_path = processed_dir / "unsw_aligned.parquet"
+    _check_file(cic_path, "Canonical CICIDS-2017 Parquet")
+    _check_file(unsw_path, "Canonical UNSW-NB15 Parquet")
 
     cic_df = pd.read_parquet(cic_path)
     unsw_df = pd.read_parquet(unsw_path)
@@ -208,6 +219,37 @@ def cmd_transfer(args: argparse.Namespace) -> None:
     results.to_csv(output, index=False)
     LOGGER.info("Transfer results (%d rows) -> %s", len(results), output)
     print(results.to_string(index=False))
+
+
+def cmd_align(args: argparse.Namespace) -> None:
+    """Run divergence analysis and CORAL transfer in both directions."""
+    import pandas as pd
+    from src.domain_alignment import align_bidirectional
+    from src.evaluation import consolidate_results
+
+    processed_dir = Path(getattr(args, "output_dir", getattr(args, "processed_dir", PROCESSED_DATA_DIR)))
+    cic_path = processed_dir / "cic_aligned.parquet"
+    unsw_path = processed_dir / "unsw_aligned.parquet"
+    _check_file(cic_path, "Canonical CICIDS-2017 Parquet")
+    _check_file(unsw_path, "Canonical UNSW-NB15 Parquet")
+    cic_df, unsw_df = pd.read_parquet(cic_path), pd.read_parquet(unsw_path)
+    aligned, details = align_bidirectional(cic_df, unsw_df, models=args.models,
+                                           lambda_reg=args.lambda_reg)
+    _ensure_dir(RESULTS_DIR)
+    aligned.to_csv(RESULTS_DIR / "aligned_results.csv", index=False)
+    report_rows = []
+    for direction, detail in details.items():
+        for phase in ("divergence_before", "divergence_after"):
+            report = detail[phase]
+            w = report["wasserstein"].set_index("feature")["wasserstein_dist"]
+            k = report["kl"].set_index("feature")["kl_divergence"]
+            for feature in w.index.union(k.index):
+                report_rows.append({"direction": direction, "phase": phase,
+                    "feature": feature, "wasserstein_distance": w.get(feature),
+                    "kl_divergence": k.get(feature), "mmd_squared": report["mmd"]})
+    pd.DataFrame(report_rows).to_csv(RESULTS_DIR / "divergence_report.csv", index=False)
+    LOGGER.info("Aligned results (%d rows) and divergence report saved to %s", len(aligned), RESULTS_DIR)
+    print(aligned.to_string(index=False))
 
 
 # -- Command: evaluate ----------------------------------------------------
@@ -310,24 +352,26 @@ def cmd_run(args: argparse.Namespace) -> None:
     LOGGER.info("=== Full Pipeline ===")
 
     # Step 1: Preprocess.
-    LOGGER.info("Step 1/4: Preprocessing...")
+    LOGGER.info("Step 1/5: Preprocessing and canonical mapping...")
     cmd_preprocess(args)
 
     # Step 2: Baselines.
-    LOGGER.info("Step 2/4: Same-dataset baselines...")
+    LOGGER.info("Step 2/5: Same-dataset baselines...")
     cmd_baselines(args)
 
     # Step 3: Cross-dataset transfer.
-    LOGGER.info("Step 3/4: Cross-dataset transfer...")
+    LOGGER.info("Step 3/5: Cross-dataset transfer...")
     cmd_transfer(args)
 
-    # Step 4: Consolidate and evaluate.
-    LOGGER.info("Step 4/4: Consolidating and computing GRR...")
-    # Reset results_csv so evaluate discovers files automatically.
+    # Step 4: Unsupervised alignment and aligned cross-domain evaluation.
+    LOGGER.info("Step 4/5: Divergence analysis and CORAL alignment...")
+    cmd_align(args)
+
+    # Step 5: Consolidate and report retention/recovery metrics.
+    LOGGER.info("Step 5/5: Consolidating evaluation results...")
     args.results_csv = None
     cmd_evaluate(args)
-
-    LOGGER.info("Pipeline complete.  Launch the dashboard: python main.py dashboard")
+    LOGGER.info("Pipeline complete. Launch the dashboard with: python main.py dashboard")
 
 
 # ── Argument parser ───────────────────────────────────────────────────────
@@ -379,6 +423,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run same-dataset baseline evaluation (Module 2)",
     )
     sp_base.add_argument("--models", nargs="+", default=None)
+    sp_base.add_argument("--processed-dir", type=Path, default=PROCESSED_DATA_DIR)
     sp_base.set_defaults(func=cmd_baselines)
 
     # transfer
@@ -387,7 +432,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run bidirectional cross-dataset transfer (Module 2)",
     )
     sp_xfer.add_argument("--models", nargs="+", default=None)
+    sp_xfer.add_argument("--processed-dir", type=Path, default=PROCESSED_DATA_DIR)
     sp_xfer.set_defaults(func=cmd_transfer)
+
+    # align
+    sp_align = subparsers.add_parser(
+        "align", help="Run divergence analysis and CORAL aligned transfer (Module 3)"
+    )
+    sp_align.add_argument("--models", nargs="+", default=None)
+    sp_align.add_argument("--lambda-reg", type=float, default=1e-3)
+    sp_align.add_argument("--processed-dir", type=Path, default=PROCESSED_DATA_DIR)
+    sp_align.set_defaults(func=cmd_align)
 
     # evaluate
     sp_eval = subparsers.add_parser(
@@ -419,6 +474,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp_run.add_argument("--output-dir", type=Path, default=PROCESSED_DATA_DIR)
     sp_run.add_argument("--models", nargs="+", default=None)
     sp_run.add_argument("--results-csv", default=None)
+    sp_run.add_argument("--lambda-reg", type=float, default=1e-3)
     sp_run.set_defaults(func=cmd_run)
 
     return parser

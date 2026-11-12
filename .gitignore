@@ -26,3 +26,9 @@ venv/
 Thumbs.db
 .DS_Store
 powershell.cmd
+
+# User-supplied archive files kept locally for review
+/7th sem Project.rar
+/Module_3.rar
+/crossdataset.zip
+/Apriori_Algorithm_Presentation_Stationery_Store.pptx

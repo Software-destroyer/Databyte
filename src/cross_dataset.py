@@ -23,6 +23,7 @@ from src.baseline_models import (
     classification_metrics,
     positive_class_scores,
     split_features_and_labels,
+    select_training_indices,
 )
 from src.config import RANDOM_SEED
 
@@ -76,12 +77,14 @@ def evaluate_transfer(
     )
     source_x_train_scaled = source_preprocessor.fit_transform(source_x_train)
     target_x_scaled = source_preprocessor.transform(target_x)
-    source_benign, source_attack = class_counts(source_y_train)
     target_benign, target_attack = class_counts(target_y)
     rows = []
     for model_name in selected_models:
+        model_train_idx = select_training_indices(source_y, source_train_idx, model_name, random_state)
+        model_train_y = source_y[model_train_idx]
+        source_benign, source_attack = class_counts(model_train_y)
         estimator = build_estimator(model_name)
-        estimator.fit(source_x_train_scaled, source_y_train)
+        estimator.fit(source_preprocessor.transform(source_x.iloc[model_train_idx]), model_train_y)
         predictions = estimator.predict(target_x_scaled).astype(np.int8)
         scores = positive_class_scores(estimator, target_x_scaled)
         rows.append(
@@ -91,7 +94,7 @@ def evaluate_transfer(
                 "test_domain": target_domain,
                 "evaluation_mode": "zero_shot_cross_dataset",
                 "model": model_name,
-                "n_train": int(len(source_y_train)),
+                "n_train": int(len(model_train_y)),
                 "n_test": int(len(target_y)),
                 "train_benign": source_benign,
                 "train_attack": source_attack,
@@ -157,11 +160,9 @@ def run_cross_dataset_evaluation(
     )
     return pd.DataFrame({
         "model": result["model"].map(lambda name: {
-            "random_forest": "RF",
-            "decision_tree": "DT",
-            "logistic_regression": "LR",
-            "knn": "KNN",
-            "svm": "SVM",
+            "random_forest": "RF", "decision_tree": "DT",
+            "logistic_regression": "LR", "svm_linear": "SVM Linear",
+            "svm_rbf": "SVM RBF", "xgboost": "XGBoost",
         }[name]),
         "train_dataset": result["training_domain"],
         "test_dataset": result["test_domain"],

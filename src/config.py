@@ -14,9 +14,10 @@ CSV_CHUNK_SIZE = 100_000
 DEFAULT_SUBSAMPLE_SIZE = 200_000
 SUBSAMPLE_SIZE = DEFAULT_SUBSAMPLE_SIZE
 PARQUET_COMPRESSION = "snappy"
+RBF_SVM_MAX_TRAIN_ROWS = 10_000
 
-# Canonical names map to dataset-specific names. Entries with more than one
-# UNSW field are alternatives and are intentionally not combined implicitly.
+# Shared numeric flow semantics. CIC Flow Duration is converted to seconds
+# by FeatureMapper to match UNSW dur; other fields retain common units.
 SEMANTIC_FEATURE_MAPPING = {
     "flow_duration": {"cicids2017": "Flow Duration", "unsw_nb15": "dur"},
     "total_forward_packets": {
@@ -38,15 +39,11 @@ SEMANTIC_FEATURE_MAPPING = {
     "flow_packet_rate": {"cicids2017": "Flow Packets/s", "unsw_nb15": "rate"},
     "forward_packet_length_mean": {
         "cicids2017": "Fwd Packet Length Mean",
-        "unsw_nb15": "smean",
+        "unsw_nb15": ("smean", "smeansz"),
     },
     "backward_packet_length_mean": {
         "cicids2017": "Bwd Packet Length Mean",
-        "unsw_nb15": "dmean",
-    },
-    "flow_iat_mean": {
-        "cicids2017": "Flow IAT Mean",
-        "unsw_nb15": ("sintpkt", "dintpkt"),
+        "unsw_nb15": ("dmean", "dmeansz"),
     },
     "label": {"cicids2017": "Label", "unsw_nb15": "label"},
 }
@@ -58,7 +55,7 @@ MODEL_HYPERPARAMETERS = {
         "random_state": RANDOM_SEED,
     },
     "random_forest": {
-        "n_estimators": 200,
+        "n_estimators": 100,
         "max_depth": 20,
         "random_state": RANDOM_SEED,
         "n_jobs": -1,
@@ -68,6 +65,15 @@ MODEL_HYPERPARAMETERS = {
         "max_iter": 1_000,
         "random_state": RANDOM_SEED,
     },
-    "knn": {"n_neighbors": 5, "metric": "minkowski", "n_jobs": -1},
-    "svm": {"kernel": "rbf", "C": 1.0, "gamma": "scale", "random_state": RANDOM_SEED},
+    "svm_linear": {"kernel": "linear", "C": 1.0, "random_state": RANDOM_SEED},
+    "svm_rbf": {"kernel": "rbf", "C": 1.0, "gamma": "scale", "random_state": RANDOM_SEED},
+    "xgboost": {
+        "n_estimators": 100,
+        "max_depth": 6,
+        "learning_rate": 0.1,
+        "objective": "binary:logistic",
+        "eval_metric": "logloss",
+        "random_state": RANDOM_SEED,
+        "n_jobs": -1,
+    },
 }

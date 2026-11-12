@@ -12,7 +12,7 @@ from tests.mock_data_generator import generate_mock_data
 
 def test_canonical_feature_names_list() -> None:
     features = get_canonical_features(include_label=False)
-    assert len(features) >= 9
+    assert len(features) >= 8
     assert "flow_duration" in features
     assert "label" not in features
 

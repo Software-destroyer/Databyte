@@ -78,6 +78,7 @@ class TestMockCommand:
         assert len(df) > 0
         assert "accuracy" in df.columns
         assert "evaluation_mode" in df.columns
+        assert set(df["data_source"]) == {"synthetic_demo"}
 
     def test_mock_deterministic(self, tmp_path: Path, monkeypatch):
         """Two runs with the same seed produce identical results."""
